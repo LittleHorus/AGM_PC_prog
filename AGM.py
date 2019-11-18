@@ -31,6 +31,7 @@ class CommonWindow(QtWidgets.QWidget):
 		#pg.setConfigOption('background', 'd')
 		pg.setConfigOption('foreground', 'g')	
 		self.graph = pg.PlotWidget()
+		
 		self.graph.setMinimumSize(500,200)
 
 		#m = PlotCanvas(self, width = 5, height = 4)
@@ -247,10 +248,13 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		self.agm_recordbutton.clicked.connect(self.on_display_record)
 		
+		#self.comport_combo.activated.connect(self.on_activated_com_list)
+		
 		
 	def on_activated_com_list(self, str):
 		#self.label.setText(str)
 		self.ComPort = str
+		
 		
 	def on_clear(self):
 		clear_res = QtWidgets.QMessageBox.question(self, "Подтверждение стирания памяти МК", "Вы действительно хотите стереть данные?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
@@ -276,9 +280,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.bar.setValue(0)
 		self.meas_thread.start()
 		
-	def on_status_text_change(self, status_text):
-		#self.label.setText("measurements - {}".format(status_text))
-		print("nothing")
 		
 	def on_meas_completed(self):
 		self.btn_load.setDisabled(False)
@@ -288,8 +289,12 @@ class CommonWindow(QtWidgets.QWidget):
 		
 	def on_display_record(self):
 		data = [1021,1025,1017,1029,1023,1026,1035,1058,1082,1134,1169,1224,1151,1113,1042,1021,1021,1021,1021,1021,1013,1018,1004,1002]#test data value for plot
+		for i in range(len(data)):
+			data += np.random.normal(0,10,len(data))
+		self.graph.clear()
 		self.record_number = self.agm_recordbox.currentIndex()
-		self.graph.plot(data, pen = pg.mkPen('g', width = 4), symbol = 'o', title = "Record №{}".format(self.record_number))
+		self.graph.plot(data, pen = pg.mkPen('g', width = 4), symbol = 't', title = "Record №{}".format(self.record_number))
+		self.graph.showGrid(1,1,1)
 				
 		
 	def closeEvent(self, event):#перехватываем событие закрытия приложения
@@ -310,8 +315,7 @@ class paramWindow(QtWidgets.QWidget):
 		self.label_cf = QtWidgets.QLabel("AGM idn:")
 		self.label_cf.setAlignment(QtCore.Qt.AlignHCenter)
 		
-		
-		
+
 class evThread(QtCore.QThread):
 	
 	status_signal = QtCore.pyqtSignal(str)
