@@ -7,7 +7,7 @@ from PyQt5.QtCore import Qt
 import pyqtgraph as pg 
 import numpy as np
 import serial
-
+import os
 
 __version__ = '0.2beta'
 
@@ -33,7 +33,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.graph.showGrid(1,1,1)
 		
 		self.graph.setMinimumSize(500,200)
-
+		self.readblock = 0
 		#m = PlotCanvas(self, width = 5, height = 4)
 		#m.move(320,20)
 		#self.show()
@@ -53,8 +53,10 @@ class CommonWindow(QtWidgets.QWidget):
 		self.ComPort = str
 		self.comport_combo = QtWidgets.QComboBox()
 		self.comport_combo.addItems([""])
+		self.comport_combo.addItems(["Refresh"])
 		self.comport_combo.activated[str].connect(self.on_activated_com_list)
-		self.comport_combo.activated[str].connect(self.ComPort)		
+		self.comport_combo.activated[str].connect(self.ComPort)
+
 		
 		vertical_size = 30
 		horizontal_size = 80
@@ -89,7 +91,7 @@ class CommonWindow(QtWidgets.QWidget):
 		#vertical_size = 30
 		#horizontal_size = 200		
 		#self.agm_recordbox = QtWidgets.QComboBox(self)#span for nwa
-		#self.agm_recordbox.addItems(["№1  16.11.19  10:22:15", "№2  16.11.19  12:05:02", "№3  16.11.19  17:41:55"])
+		#self.agm_recordbox.addItems(["№1  16.11.19	 10:22:15", "№2	 16.11.19  12:05:02", "№3  16.11.19	 17:41:55"])
 		#self.agm_recordbox.setMaximumSize(horizontal_size,vertical_size)
 		#self.agm_recordbox.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
 		
@@ -119,6 +121,10 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_utc_label.setMaximumSize(horizontal_size,vertical_size)
 		self.agm_utc_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Maximum)	
 
+		
+		self.agm_readblock = QtWidgets.QLabel("None")
+		self.agm_readblock.setMaximumSize(horizontal_size,vertical_size)
+		self.agm_readblock.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Maximum)#Fixed		
 		#self.lbl_g = QtWidgets.QLabel()
 		#self.lbl.setPixmap(self.gifka)
 		#self.movie = QtGui.QMovie("just.gif",QtCore.QByteArray(),self)
@@ -127,15 +133,16 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.movie.start()
 		
 		self.table_of_records = QtWidgets.QTableWidget(self)
-		self.table_of_records.setColumnCount(4)
-		self.table_of_records.setMinimumSize(300,200)
+		self.table_of_records.setColumnCount(5)
+		self.table_of_records.setMinimumSize(320,200)
 		self.table_of_records.setMaximumSize(320,700)
 		self.table_of_records.setRowCount(10)
-		self.table_of_records.setHorizontalHeaderLabels(["  Date  ", "  Time  ","Signal\nType","   GPS   "])
+		self.table_of_records.setHorizontalHeaderLabels(["	Date  ", "	Time  ","Signal\nType","   GPS	 ", "Recording\nduration"])
 		self.table_of_records.horizontalHeaderItem(0).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(1).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(2).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(3).setTextAlignment(QtCore.Qt.AlignCenter)
+		self.table_of_records.horizontalHeaderItem(4).setTextAlignment(QtCore.Qt.AlignCenter)
 		#self.table_of_records.setColumnWidth(2, 80)
 		self.table_of_records.horizontalHeader().setStretchLastSection(True)
 		
@@ -144,18 +151,22 @@ class CommonWindow(QtWidgets.QWidget):
 		self.table_of_records.setItem(0,1,QtWidgets.QTableWidgetItem("21:56:17"))
 		self.table_of_records.setItem(0,2,QtWidgets.QTableWidgetItem("Mag"))
 		self.table_of_records.setItem(0,3,QtWidgets.QTableWidgetItem("54,575N\n82,579E"))
+		self.table_of_records.setItem(0,4,QtWidgets.QTableWidgetItem("23sec"))
 		
 		self.table_of_records.setItem(1,0,QtWidgets.QTableWidgetItem("18.11.19"))
 		self.table_of_records.setItem(1,1,QtWidgets.QTableWidgetItem("21:59:22"))
 		self.table_of_records.setItem(1,2,QtWidgets.QTableWidgetItem("Mag"))
 		self.table_of_records.setItem(1,3,QtWidgets.QTableWidgetItem("54,575N\n82,579E"))
-
+		self.table_of_records.setItem(1,4,QtWidgets.QTableWidgetItem("15sec"))
+		
 		self.table_of_records.setItem(2,0,QtWidgets.QTableWidgetItem("18.11.19"))
 		self.table_of_records.setItem(2,1,QtWidgets.QTableWidgetItem("22:03:39"))
 		self.table_of_records.setItem(2,2,QtWidgets.QTableWidgetItem("Mag"))
 		self.table_of_records.setItem(2,3,QtWidgets.QTableWidgetItem("54,575N\n82,579E"))		
+		self.table_of_records.setItem(2,4,QtWidgets.QTableWidgetItem("49sec"))
 		
 		self.table_of_records.resizeColumnsToContents()
+		self.table_of_records.setColumnWidth(4,40)
 		
 		#self.agm_serial_number = QtWidgets.QLineEdit()
 		#self.form = QtWidgets.QFormLayout()
@@ -221,7 +232,7 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.grid.addWidget(self.btn_pause,2,1)
 		
 		#self.grid_2.addWidget(self.agm_recordbox,0,1)#
-		#self.grid_2.addWidget(self.agm_recordbutton,0,0)# 		
+		#self.grid_2.addWidget(self.agm_recordbutton,0,0)#		
 		self.grid_2.addWidget(QtWidgets.QLabel(""),6,0)
 		self.grid_2.addWidget(QtWidgets.QLabel(""),6,1)
 		self.grid_2.addWidget(QtWidgets.QLabel(""),6,2)
@@ -250,18 +261,16 @@ class CommonWindow(QtWidgets.QWidget):
 		self.vbox_1.insertLayout(0,self.grid)
 		self.vbox_1.insertLayout(1,self.grid_2)
 		self.vbox_1.insertLayout(2,self.grid_3)
+		self.vbox_1.addWidget(self.agm_readblock)
 		self.vbox_1.insertStretch(3,0)
 		#self.vbox_1.insertLayout(1,self.form)
-		
 		#self.setLayout(self.grid)
-		
 		
 		self.hbox = QtWidgets.QHBoxLayout()
 		self.hbox.addWidget(self.graph)
 		#self.hbox.addWidget(self.m)
 		self.hbox.insertLayout(0,self.vbox_1)
 	
-
 		self.hbox_upper = QtWidgets.QHBoxLayout()
 
 		self.hbox_upper.insertSpacing(2,500)
@@ -276,7 +285,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.setLayout(self.vbox)
 		
 
-		
 		#self.vbox.addLayout(self.hbox)
 		#self.vbox.insertLayout(0,self.hbox)
 		#self.vbox.insertLayout(0,self.grid_param)
@@ -292,6 +300,7 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		
 		self.btn_visa_connect.clicked.connect(self.on_connected)
+		self.btn_visa_connect.clicked.connect(self.on_get_current_path)
 		self.btn_visa_disconnect.clicked.connect(self.on_disconnected)
 		
 		self.btn_load.clicked.connect(self.on_start_load)
@@ -310,24 +319,47 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		#self.comport_combo.activated.connect(self.on_activated_com_list)
 	def on_connected(self):
-		
-		self.btn_visa_connect.setDisabled(True)
-		self.btn_visa_disconnect.setDisabled(False)
-		self.btn_load.setDisabled(False)
-		#self.btn_save.setDisabled(True)
-		self.btn_clear.setDisabled(False)		
+		try:
+			self.ser = serial.Serial(self.ComPort, baudrate=115200, bytesize=serial.EIGHTBITS,
+									 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 0.5)
+			
+			self.ser.isOpen()  # try to open port
+			print("Connected to {}".format(self.ComPort))
+
+			self.btn_visa_connect.setDisabled(True)
+			self.btn_visa_disconnect.setDisabled(False)
+			self.btn_load.setDisabled(False)
+			#self.btn_save.setDisabled(True)
+			self.btn_clear.setDisabled(False)
+		except IOError:
+			#pass
+			print("Port already open another programm")
+		except serial.SerialException:
+			print("SerialException")
+	
 	def on_disconnected(self):
 		self.btn_visa_connect.setDisabled(False)
 		self.btn_visa_disconnect.setDisabled(True)	
 		self.btn_load.setDisabled(True)
 		self.btn_save.setDisabled(True)
 		self.btn_clear.setDisabled(True)		
-		
+		self.ser.close()
+		print("Disconnected")
+				
 	def on_activated_com_list(self, str):
 		#self.label.setText(str)
-		self.ComPort = str
-		
-		
+		if self.comport_combo.currentText() == "":
+			self.btn_visa_connect.setDisabled(True)
+		elif self.comport_combo.currentText() == "Refresh":
+			self.btn_visa_connect.setDisabled(True)
+			self.comport_combo.clear()
+			self.comport_combo.addItems([""])
+			self.comport_combo.addItems(["Refresh"])
+			self.comport_combo.addItems(serial_ports())
+		else:
+			self.ComPort = str
+			self.btn_visa_connect.setDisabled(False)
+				
 	def on_clear(self):
 		clear_res = QtWidgets.QMessageBox.question(self, "Подтверждение стирания памяти МК", "Вы действительно хотите стереть данные?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
 		if clear_res == QtWidgets.QMessageBox.Yes:
@@ -353,6 +385,43 @@ class CommonWindow(QtWidgets.QWidget):
 		self.bar.setValue(0)
 		self.meas_thread.start()
 		
+		self.ser.write(bytearray.fromhex('7f aa 44 00'))
+		self.readblock = self.ser.read(45)
+		
+		#self.agm_readblock.setText(self.readblock.decode("utf-8"))
+		#self.ser.read()
+	def data_processing(self, data_from_agm):
+		pass
+			
+	def on_get_current_path(self):
+		print(os.path.abspath(__file__))	
+		
+	def data_save_to_file(self, data_to_file, name = "test"):
+		filename = "D:\\Python\\{}.dat".format(name)
+		np.savetxt(filename, data_to_file, delimiter = ',')
+		print("saved")
+
+
+	def read_mcu(self):
+
+		try:
+			ba = self.ser.read(2048)#mcu send fixed size packet
+			parse_byte_list = list()
+			for i in range(len(ba)):
+				parse_byte_list.append(int(ba[i]))
+
+			#string_for_label = ''
+			string_for_label = [f'0x{i:02X}' for i in parse_byte_list]
+
+
+			print(string_for_label)
+			self.com_read_label.setText(str(string_for_label))
+			self.com_read_label.adjustSize()			
+
+		except:
+			print("Unexpected error")
+
+
 		
 	def on_meas_completed(self):
 		self.btn_load.setDisabled(False)
@@ -377,11 +446,11 @@ class CommonWindow(QtWidgets.QWidget):
 	def on_change_table_item(self, item):
 		self.previous_row = self.current_row
 		self.current_row = item.row()
-		for j in range(4):
+		for j in range(5):
 			self.table_of_records.item(self.current_row, j).setBackground(QtGui.QColor(100,200,50))
 			if self.previous_row != -1:
 				self.table_of_records.item(self.previous_row, j).setBackground(QtGui.QColor(255,255,255))
-		if  self.current_row != self.previous_row:
+		if	self.current_row != self.previous_row:
 			self.on_display_record()
 		
 		
