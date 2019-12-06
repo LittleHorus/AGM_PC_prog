@@ -8,6 +8,8 @@ import pyqtgraph as pg
 import numpy as np
 import serial
 import os
+from time import gmtime, strftime
+import traceback
 
 __version__ = '0.2beta'
 
@@ -17,7 +19,7 @@ class CommonWindow(QtWidgets.QWidget):
 	def __init__(self, parent = None):
 		QtWidgets.QWidget.__init__(self, parent)
 
-		data = [2021,2025,2017,2018,2023,2026,2035,2058,2082,2134,2169,2224,2151,2113,2042,2021,2021,2021,2021,2021,2021,2021,2021,2021]#test data value for plot
+		self.data = [2021,2025,2017,2018,2023,2026,2035,2058,2082,2134,2169,2224,2151,2113,2042,2021,2021,2021,2021,2021,2021,2021,2021,2021]#test data value for plot
 		
 		#pg.plot(data)
 		
@@ -34,6 +36,7 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		self.graph.setMinimumSize(500,200)
 		self.readblock = 0
+		self.previous_agm_serial_number = "1"
 		#m = PlotCanvas(self, width = 5, height = 4)
 		#m.move(320,20)
 		#self.show()
@@ -147,23 +150,29 @@ class CommonWindow(QtWidgets.QWidget):
 		self.table_of_records.horizontalHeader().setStretchLastSection(True)
 		
 		#data
-		self.table_of_records.setItem(0,0,QtWidgets.QTableWidgetItem("18.11.19"))
-		self.table_of_records.setItem(0,1,QtWidgets.QTableWidgetItem("21:56:17"))
+		self.table_of_records.setItem(0,0,QtWidgets.QTableWidgetItem("06.12.19"))
+		self.table_of_records.setItem(0,1,QtWidgets.QTableWidgetItem("13:05:22"))
 		self.table_of_records.setItem(0,2,QtWidgets.QTableWidgetItem("Mag"))
-		self.table_of_records.setItem(0,3,QtWidgets.QTableWidgetItem("54,575N\n82,579E"))
-		self.table_of_records.setItem(0,4,QtWidgets.QTableWidgetItem("23sec"))
-		
-		self.table_of_records.setItem(1,0,QtWidgets.QTableWidgetItem("18.11.19"))
-		self.table_of_records.setItem(1,1,QtWidgets.QTableWidgetItem("21:59:22"))
+		self.table_of_records.setItem(0,3,QtWidgets.QTableWidgetItem("54,320N\n82,642E"))
+		self.table_of_records.setItem(0,4,QtWidgets.QTableWidgetItem("2sec"))
+
+		self.table_of_records.setItem(1,0,QtWidgets.QTableWidgetItem("06.12.19"))
+		self.table_of_records.setItem(1,1,QtWidgets.QTableWidgetItem("13:07:22"))
 		self.table_of_records.setItem(1,2,QtWidgets.QTableWidgetItem("Mag"))
-		self.table_of_records.setItem(1,3,QtWidgets.QTableWidgetItem("54,575N\n82,579E"))
-		self.table_of_records.setItem(1,4,QtWidgets.QTableWidgetItem("15sec"))
+		self.table_of_records.setItem(1,3,QtWidgets.QTableWidgetItem("54,320N\n82,642E"))
+		self.table_of_records.setItem(1,4,QtWidgets.QTableWidgetItem("13sec"))
 		
-		self.table_of_records.setItem(2,0,QtWidgets.QTableWidgetItem("18.11.19"))
-		self.table_of_records.setItem(2,1,QtWidgets.QTableWidgetItem("22:03:39"))
-		self.table_of_records.setItem(2,2,QtWidgets.QTableWidgetItem("Mag"))
-		self.table_of_records.setItem(2,3,QtWidgets.QTableWidgetItem("54,575N\n82,579E"))		
-		self.table_of_records.setItem(2,4,QtWidgets.QTableWidgetItem("49sec"))
+		#self.table_of_records.setItem(1,0,QtWidgets.QTableWidgetItem("18.11.19"))
+		#self.table_of_records.setItem(1,1,QtWidgets.QTableWidgetItem("21:59:22"))
+		#self.table_of_records.setItem(1,2,QtWidgets.QTableWidgetItem("Mag"))
+		#self.table_of_records.setItem(1,3,QtWidgets.QTableWidgetItem("54,575N\n82,579E"))
+		#self.table_of_records.setItem(1,4,QtWidgets.QTableWidgetItem("15sec"))
+		
+		#self.table_of_records.setItem(2,0,QtWidgets.QTableWidgetItem("18.11.19"))
+		#self.table_of_records.setItem(2,1,QtWidgets.QTableWidgetItem("22:03:39"))
+		#self.table_of_records.setItem(2,2,QtWidgets.QTableWidgetItem("Mag"))
+		#self.table_of_records.setItem(2,3,QtWidgets.QTableWidgetItem("54,575N\n82,579E"))		
+		#self.table_of_records.setItem(2,4,QtWidgets.QTableWidgetItem("49sec"))
 		
 		self.table_of_records.resizeColumnsToContents()
 		self.table_of_records.setColumnWidth(4,40)
@@ -295,6 +304,9 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_load.setDisabled(True)
 		self.btn_save.setDisabled(True)
 		self.btn_clear.setDisabled(True)
+		self.agm_serial_number.setDisabled(True)
+		self.agm_filterbox.setDisabled(True)
+		self.agm_utc.setDisabled(True)
 		
 		self.meas_thread = evThread()
 		
@@ -302,7 +314,11 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_visa_connect.clicked.connect(self.on_connected)
 		self.btn_visa_connect.clicked.connect(self.on_get_current_path)
 		self.btn_visa_disconnect.clicked.connect(self.on_disconnected)
+		self.btn_save.clicked.connect(self.on_save_to_file)
 		
+		self.agm_serial_number.editingFinished.connect(self.on_change_serial_number)
+
+
 		self.btn_load.clicked.connect(self.on_start_load)
 		#self.meas_thread.started.connect(self.on_meas_started)
 		self.meas_thread.finished.connect(self.on_meas_completed)
@@ -317,6 +333,8 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.agm_recordbutton.clicked.connect(self.on_display_record)
 		self.table_of_records.itemClicked.connect(self.on_change_table_item)
 		
+		self.agm_filterbox.activated.connect(self.on_change_notch_filter)
+		self.agm_utc.activated.connect(self.on_change_utc_timezone)
 		#self.comport_combo.activated.connect(self.on_activated_com_list)
 	def on_connected(self):
 		try:
@@ -331,18 +349,50 @@ class CommonWindow(QtWidgets.QWidget):
 			self.btn_load.setDisabled(False)
 			#self.btn_save.setDisabled(True)
 			self.btn_clear.setDisabled(False)
+			self.agm_serial_number.setDisabled(False)
+			self.agm_filterbox.setDisabled(False)
+			self.agm_utc.setDisabled(False)
 		except IOError:
 			#pass
 			print("Port already open another programm")
 		except serial.SerialException:
 			print("SerialException")
-	
+		except:
+			print("Unexpected error, Null ComName")
+	def on_change_serial_number(self):
+		if self.agm_serial_number.text() != self.previous_agm_serial_number:
+
+			
+			adr_hi_byte = ((int)(self.agm_serial_number.text())>>8)&0xFF
+			adr_lo_byte = ((int)(self.agm_serial_number.text())&0xff)
+			print(bytearray.fromhex('7f aa 01 02 {:02X} {:02X}'.format(adr_hi_byte, adr_lo_byte)))
+			self.ser.write(bytearray.fromhex('7f aa 01 02 {:02X} {:02X}'.format(adr_hi_byte, adr_lo_byte)))
+
+		self.previous_agm_serial_number = self.agm_serial_number.text()	
+	def on_change_notch_filter(self):
+		if self.agm_filterbox.currentText() == "50Hz":
+			adr_byte = 0
+			print(bytearray.fromhex('7f aa 01 04 {:02X} 00'.format(adr_byte)))
+			self.ser.write(bytearray.fromhex('7f aa 01 04 {:02X} 00'.format(adr_byte)))
+		if 	self.agm_filterbox.currentText() == "60Hz":		
+			adr_byte = 1
+			print(bytearray.fromhex('7f aa 01 04 {:02X} 00'.format(adr_byte)))
+			self.ser.write(bytearray.fromhex('7f aa 01 04 {:02X} 00'.format(adr_byte)))
+	def on_change_utc_timezone(self):
+		adr_byte = self.agm_utc.currentIndex()
+		print(bytearray.fromhex('7f aa 01 05 {:02X} 00'.format(adr_byte)))
+		print("MCU UTC timezone not realized")
+		self.ser.write(bytearray.fromhex('7f aa 01 05 {:02X} 00'.format(adr_byte)))
+		
 	def on_disconnected(self):
 		self.btn_visa_connect.setDisabled(False)
 		self.btn_visa_disconnect.setDisabled(True)	
 		self.btn_load.setDisabled(True)
 		self.btn_save.setDisabled(True)
-		self.btn_clear.setDisabled(True)		
+		self.btn_clear.setDisabled(True)
+		self.agm_serial_number.setDisabled(True)
+		self.agm_filterbox.setDisabled(True)
+		self.agm_utc.setDisabled(True)		
 		self.ser.close()
 		print("Disconnected")
 				
@@ -364,7 +414,8 @@ class CommonWindow(QtWidgets.QWidget):
 		clear_res = QtWidgets.QMessageBox.question(self, "Подтверждение стирания памяти МК", "Вы действительно хотите стереть данные?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
 		if clear_res == QtWidgets.QMessageBox.Yes:
 			#self.graph.clear()
-			self.bar.setValue(0)
+			#self.bar.setValue(0)
+			self.ser.write(bytearray.fromhex('7f aa 01 03 00 00'))
 	
 	def on_choose_param(self):
 		self.pwindow.resize(200,100)
@@ -385,21 +436,30 @@ class CommonWindow(QtWidgets.QWidget):
 		self.bar.setValue(0)
 		self.meas_thread.start()
 		
-		self.ser.write(bytearray.fromhex('7f aa 44 00'))
-		self.readblock = self.ser.read(45)
-		
+		self.ser.write(bytearray.fromhex('7f aa 01 01 00 00'))
+		self.read_mcu()
+		#self.data = self.readblock = self.ser.read(2048)
+	
 		#self.agm_readblock.setText(self.readblock.decode("utf-8"))
 		#self.ser.read()
 	def data_processing(self, data_from_agm):
 		pass
 			
 	def on_get_current_path(self):
-		print(os.path.abspath(__file__))	
+		print(os.path.dirname(os.path.abspath(__file__)))	
 		
-	def data_save_to_file(self, data_to_file, name = "test"):
-		filename = "D:\\Python\\{}.dat".format(name)
-		np.savetxt(filename, data_to_file, delimiter = ',')
-		print("saved")
+	def on_save_to_file(self):
+		#self.read_mcu()
+		self.data_to_file(strftime("%Y-%m-%d_%Hh%Mm%Ss", gmtime()), self.data)	
+
+	def data_to_file(self, name = "agm_data", agm_data=[0,0]):
+		filename = "{}\\agm_{}.dat".format(os.path.dirname(os.path.abspath(__file__)),name)
+		try:
+
+			np.savetxt(filename, agm_data, delimiter = ',')
+			print("saved")
+		except Exception:
+			traceback.print_exc()
 
 
 	def read_mcu(self):
@@ -415,8 +475,9 @@ class CommonWindow(QtWidgets.QWidget):
 
 
 			print(string_for_label)
-			self.com_read_label.setText(str(string_for_label))
-			self.com_read_label.adjustSize()			
+			self.data = parse_byte_list
+			#self.com_read_label.setText(str(string_for_label))
+			#self.com_read_label.adjustSize()			
 
 		except:
 			print("Unexpected error")
@@ -435,9 +496,9 @@ class CommonWindow(QtWidgets.QWidget):
 		self.meas_thread.running = False
 		
 	def on_display_record(self):
-		data = [2018,2025,2017,2029,2022,2026,2035,2058,2082,2134,2169,2224,2151,2113,2042,2021,2021,2024,2021,2021,2016,2013,2007,2001]#test data value for plot
+		data = [2018,2025,2017,2029,2022,2026,2035,2058,2082,2134,2169,2224,2151,2147, 2148, 2145, 2140, 2134,2113,2042,2021,2021,2024,2021,2021,2016,2013,2007,2001,2002,2001,2001,2001,2001,2001,2001,2001,2001,2001,2001,2001,2001,2001]#test data value for plot
 		for i in range(len(data)):
-			data += np.random.normal(0,4,len(data))
+			data += np.random.normal(0,1,len(data))
 		self.graph.clear()
 		self.record_number = self.current_row + 1
 		self.graph.plot(data, pen = pg.mkPen('g', width = 4), symbol = 't', title = "Record №{}".format(self.record_number))
@@ -484,7 +545,7 @@ class evThread(QtCore.QThread):
 		self.running = True
 		for i in range(25):
 			if self.running == True:
-				self.sleep(1)
+				#self.sleep(1)
 				self.status_signal.emit("{} / {}".format(i+1,100))
 				self.dataplot.emit(np.random.randn(200,))
 				self.progress.emit(4*i+4)
@@ -536,6 +597,7 @@ if __name__ == '__main__':
 	
 	app =QtWidgets.QApplication(sys.argv)
 	ex = CommonWindow()
+	ex.setFont(QtGui.QFont('Times', 10, QtGui.QFont.Bold))
 	ex.setWindowTitle("AGM Viewer")
 	ex.comport_combo.addItems(serial_ports())
 	#ex.setFixedSize(500,400)
