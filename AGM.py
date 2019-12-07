@@ -20,7 +20,7 @@ class CommonWindow(QtWidgets.QWidget):
 		QtWidgets.QWidget.__init__(self, parent)
 
 		self.data = [2021,2025,2017,2018,2023,2026,2035,2058,2082,2134,2169,2224,2151,2113,2042,2021,2021,2021,2021,2021,2021,2021,2021,2021]#test data value for plot
-		
+		self.parsed_data_list = list()
 		#pg.plot(data)
 		
 		#self.label = QtWidgets.QLabel("<b>S21</b> measure only regime")
@@ -80,7 +80,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_visa_disconnect.setDisabled(True)
 		
 		
-		self.agm_serial_number = QtWidgets.QLineEdit("1")#center frequency for nwa
+		self.agm_serial_number = QtWidgets.QLineEdit("001")#center frequency for nwa
 		self.agm_serial_number.setMaximumSize(horizontal_size,vertical_size)
 		self.agm_serial_number.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 		self.agm_serial_number.setValidator(self.onlyInt)
@@ -137,8 +137,8 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		self.table_of_records = QtWidgets.QTableWidget(self)
 		self.table_of_records.setColumnCount(5)
-		self.table_of_records.setMinimumSize(320,200)
-		self.table_of_records.setMaximumSize(320,700)
+		self.table_of_records.setMinimumSize(400,200)
+		self.table_of_records.setMaximumSize(2000,2700)
 		self.table_of_records.setRowCount(10)
 		self.table_of_records.setHorizontalHeaderLabels(["	Date  ", "	Time  ","Signal\nType","   GPS	 ", "Recording\nduration"])
 		self.table_of_records.horizontalHeaderItem(0).setTextAlignment(QtCore.Qt.AlignCenter)
@@ -146,8 +146,8 @@ class CommonWindow(QtWidgets.QWidget):
 		self.table_of_records.horizontalHeaderItem(2).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(3).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(4).setTextAlignment(QtCore.Qt.AlignCenter)
-		#self.table_of_records.setColumnWidth(2, 80)
-		self.table_of_records.horizontalHeader().setStretchLastSection(True)
+		
+		self.table_of_records.horizontalHeader().setStretchLastSection(False)
 		
 		#data
 		self.table_of_records.setItem(0,0,QtWidgets.QTableWidgetItem("06.12.19"))
@@ -175,8 +175,17 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.table_of_records.setItem(2,4,QtWidgets.QTableWidgetItem("49sec"))
 		
 		self.table_of_records.resizeColumnsToContents()
-		self.table_of_records.setColumnWidth(4,40)
-		
+		self.table_of_records.setColumnWidth(0, 100)
+		self.table_of_records.setColumnWidth(1, 100)
+		self.table_of_records.setColumnWidth(2, 100)
+		self.table_of_records.setColumnWidth(3, 100)
+		self.table_of_records.setColumnWidth(4, 100)
+		#self.table_of_records.resizeRowsToContents()
+		#self.table_of_records.resizeColumnsToContents()
+		self.table_of_records.setRowHeight(0,40)
+		self.table_of_records.setRowHeight(1,40)
+		self.table_of_records.setRowHeight(2,40)
+
 		#self.agm_serial_number = QtWidgets.QLineEdit()
 		#self.form = QtWidgets.QFormLayout()
 		#self.form.addRow("Center Frequency:", self.agm_serial_number)
@@ -215,7 +224,7 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		self.grid = QtWidgets.QGridLayout()
 		self.grid_2 = QtWidgets.QGridLayout()
-		self.grid_3 = QtWidgets.QGridLayout()
+		#self.grid_3 = QtWidgets.QGridLayout()
 		
 		
 		self.grid.addWidget(self.label_visa_connect, 0, 0)
@@ -255,7 +264,7 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		self.grid.addWidget(self.bar,5,0,1,5)
 		
-		self.grid_3.addWidget(self.table_of_records,0,0)
+		#self.grid_3.addWidget(self.table_of_records,0,0)
 		#self.grid.addWidget(self.lbl_g,10,0,1,5)
 		#self.grid.addWidget(self.lbl,9,0,20,10)#add picture to grid layout
 		#self.grid.addWidget(QtWidgets.QLabel(""),20,25)
@@ -269,7 +278,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.vbox_1 = QtWidgets.QVBoxLayout()
 		self.vbox_1.insertLayout(0,self.grid)
 		self.vbox_1.insertLayout(1,self.grid_2)
-		self.vbox_1.insertLayout(2,self.grid_3)
+		#self.vbox_1.insertLayout(2,self.grid_3)#table grid
 		self.vbox_1.addWidget(self.agm_readblock)
 		self.vbox_1.insertStretch(3,0)
 		#self.vbox_1.insertLayout(1,self.form)
@@ -282,15 +291,17 @@ class CommonWindow(QtWidgets.QWidget):
 	
 		self.hbox_upper = QtWidgets.QHBoxLayout()
 
-		self.hbox_upper.insertSpacing(2,500)
-		self.hbox_upper.insertStretch(1,0)
-		self.hbox_upper.addSpacing(200)
+		#self.hbox_upper.insertSpacing(2,500)
+		#self.hbox_upper.insertStretch(1,0)
+		#self.hbox_upper.addSpacing(200)
 		
 		self.vbox = QtWidgets.QVBoxLayout()
 		#self.vbox.addWidget(self.label)		
 		#self.vbox.insertLayout(0,self.hbox1)
 		self.vbox.insertLayout(0,self.hbox)
-		self.vbox.insertLayout(0,self.hbox_upper)
+		#self.vbox.insertLayout(1,self.hbox_upper)
+		#self.vbox.insertLayout(2,self.grid_3)
+		self.vbox.addWidget(self.table_of_records,1)
 		self.setLayout(self.vbox)
 		
 
@@ -438,12 +449,41 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		self.ser.write(bytearray.fromhex('7f aa 01 01 00 00'))
 		self.read_mcu()
+
 		#self.data = self.readblock = self.ser.read(2048)
 	
 		#self.agm_readblock.setText(self.readblock.decode("utf-8"))
 		#self.ser.read()
 	def data_processing(self, data_from_agm):
-		pass
+		record_index_list = list()
+		records_parse_data = list()
+
+		for i in range(len(data_from_agm)):
+			if data_from_agm[i] == 0xaa and data_from_agm[i+1] == 0x55:
+				print("captured new record at index - {}".format(i))
+				record_index_list.append(i)
+		print(record_index_list)
+
+		for i in range(len(record_index_list)):
+			temp_list = list()
+			if i != (len(record_index_list)-1):
+				data_len = record_index_list[i+1] - record_index_list[i]
+			if i == (len(record_index_list)-1):
+				data_len = len(data_from_agm) - record_index_list[i]
+			for j in range(data_len-2):
+				temp_list.append(data_from_agm[record_index_list[i]+j+2])
+			records_parse_data.append(temp_list)
+		print(len(records_parse_data))
+
+		for i in range(len(records_parse_data)):
+			header = records_parse_data[i][:19]
+			temp_data_unparsed = records_parse_data[i][19:]
+			temp_data = list()
+			for j in range(int(len(temp_data_unparsed)/2)):
+				temp_data.append((temp_data_unparsed[2*j]<<8)|(temp_data_unparsed[2*j+1]))
+
+			self.parsed_data_list.append(temp_data)
+		print(len(self.parsed_data_list))
 			
 	def on_get_current_path(self):
 		print(os.path.dirname(os.path.abspath(__file__)))	
@@ -465,7 +505,13 @@ class CommonWindow(QtWidgets.QWidget):
 	def read_mcu(self):
 
 		try:
-			ba = self.ser.read(2048)#mcu send fixed size packet
+			ba = self.ser.read(4)#mcu send fixed size packet
+			parse_byte_list = list()
+
+			bytes_cnt = int.from_bytes(ba, byteorder='big', signed = False)
+			print(bytes_cnt)
+
+			ba = self.ser.read(bytes_cnt)#mcu send fixed size packet
 			parse_byte_list = list()
 			for i in range(len(ba)):
 				parse_byte_list.append(int(ba[i]))
@@ -476,12 +522,15 @@ class CommonWindow(QtWidgets.QWidget):
 
 			print(string_for_label)
 			self.data = parse_byte_list
+			if ba != '':
+				self.bar.setValue(100)
+			if ba == b'':
+				print("no data read")
 			#self.com_read_label.setText(str(string_for_label))
 			#self.com_read_label.adjustSize()			
-
+			self.data_processing(ba)
 		except:
 			print("Unexpected error")
-
 
 		
 	def on_meas_completed(self):
@@ -496,12 +545,14 @@ class CommonWindow(QtWidgets.QWidget):
 		self.meas_thread.running = False
 		
 	def on_display_record(self):
+		#self.parsed_data_list
 		data = [2018,2025,2017,2029,2022,2026,2035,2058,2082,2134,2169,2224,2151,2147, 2148, 2145, 2140, 2134,2113,2042,2021,2021,2024,2021,2021,2016,2013,2007,2001,2002,2001,2001,2001,2001,2001,2001,2001,2001,2001,2001,2001,2001,2001]#test data value for plot
 		for i in range(len(data)):
 			data += np.random.normal(0,1,len(data))
 		self.graph.clear()
 		self.record_number = self.current_row + 1
-		self.graph.plot(data, pen = pg.mkPen('g', width = 4), symbol = 't', title = "Record №{}".format(self.record_number))
+		self.graph.plot(self.parsed_data_list[self.current_row], pen = pg.mkPen('g', width = 4), symbol = 't', title = "Record №{}".format(self.record_number))
+		self.graph.enableAutoRange(enable=True)
 		self.graph.showGrid(1,1,1)
 	
 	def on_change_table_item(self, item):
@@ -597,7 +648,7 @@ if __name__ == '__main__':
 	
 	app =QtWidgets.QApplication(sys.argv)
 	ex = CommonWindow()
-	ex.setFont(QtGui.QFont('Times', 10, QtGui.QFont.Bold))
+	ex.setFont(QtGui.QFont('Arial', 10))#, QtGui.QFont.Bold
 	ex.setWindowTitle("AGM Viewer")
 	ex.comport_combo.addItems(serial_ports())
 	#ex.setFixedSize(500,400)
