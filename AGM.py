@@ -9,6 +9,7 @@ import numpy as np
 import serial
 import os
 from time import gmtime, strftime
+import time
 import traceback
 
 __version__ = '0.2beta'
@@ -25,6 +26,7 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		#self.label = QtWidgets.QLabel("<b>S21</b> measure only regime")
 		#self.label.setAlignment(QtCore.Qt.AlignHCenter)
+		self.first_load = 0
 		self.previous_row = 0
 		self.current_row = -1
 		self.record_number = 1
@@ -136,31 +138,34 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.movie.start()
 		
 		self.table_of_records = QtWidgets.QTableWidget(self)
-		self.table_of_records.setColumnCount(5)
+		self.table_of_records.setColumnCount(6)
 		self.table_of_records.setMinimumSize(400,200)
 		self.table_of_records.setMaximumSize(2000,2700)
-		self.table_of_records.setRowCount(10)
-		self.table_of_records.setHorizontalHeaderLabels(["	Date  ", "	Time  ","Signal\nType","   GPS	 ", "Recording\nduration"])
+		self.table_of_records.setRowCount(200)
+		self.table_of_records.setHorizontalHeaderLabels(["	Date  ", "	Time  ","Signal\nType","   GPS	 ", "Recording\nduration", "Tool passage\ntime"])
 		self.table_of_records.horizontalHeaderItem(0).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(1).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(2).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(3).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(4).setTextAlignment(QtCore.Qt.AlignCenter)
+		self.table_of_records.horizontalHeaderItem(5).setTextAlignment(QtCore.Qt.AlignCenter)
 		
 		self.table_of_records.horizontalHeader().setStretchLastSection(False)
 		
 		#data
-		self.table_of_records.setItem(0,0,QtWidgets.QTableWidgetItem("06.12.19"))
-		self.table_of_records.setItem(0,1,QtWidgets.QTableWidgetItem("13:05:22"))
-		self.table_of_records.setItem(0,2,QtWidgets.QTableWidgetItem("Mag"))
-		self.table_of_records.setItem(0,3,QtWidgets.QTableWidgetItem("54,320N\n82,642E"))
-		self.table_of_records.setItem(0,4,QtWidgets.QTableWidgetItem("2sec"))
+		#self.table_of_records.setItem(0,0,QtWidgets.QTableWidgetItem("06.12.19"))
+		#self.table_of_records.setItem(0,1,QtWidgets.QTableWidgetItem("13:05:22"))
+		#self.table_of_records.setItem(0,2,QtWidgets.QTableWidgetItem("Mag"))
+		#self.table_of_records.setItem(0,3,QtWidgets.QTableWidgetItem("54,320N\n82,642E"))
+		#self.table_of_records.setItem(0,4,QtWidgets.QTableWidgetItem("2sec"))
+		#self.table_of_records.setItem(0,5,QtWidgets.QTableWidgetItem(""))
 
-		self.table_of_records.setItem(1,0,QtWidgets.QTableWidgetItem("06.12.19"))
-		self.table_of_records.setItem(1,1,QtWidgets.QTableWidgetItem("13:07:22"))
-		self.table_of_records.setItem(1,2,QtWidgets.QTableWidgetItem("Mag"))
-		self.table_of_records.setItem(1,3,QtWidgets.QTableWidgetItem("54,320N\n82,642E"))
-		self.table_of_records.setItem(1,4,QtWidgets.QTableWidgetItem("13sec"))
+		#self.table_of_records.setItem(1,0,QtWidgets.QTableWidgetItem("06.12.19"))
+		#self.table_of_records.setItem(1,1,QtWidgets.QTableWidgetItem("13:07:22"))
+		#self.table_of_records.setItem(1,2,QtWidgets.QTableWidgetItem("Mag"))
+		#self.table_of_records.setItem(1,3,QtWidgets.QTableWidgetItem("54,320N\n82,642E"))
+		#self.table_of_records.setItem(1,4,QtWidgets.QTableWidgetItem("13sec"))
+		#self.table_of_records.setItem(1,5,QtWidgets.QTableWidgetItem(""))
 		
 		#self.table_of_records.setItem(1,0,QtWidgets.QTableWidgetItem("18.11.19"))
 		#self.table_of_records.setItem(1,1,QtWidgets.QTableWidgetItem("21:59:22"))
@@ -178,13 +183,14 @@ class CommonWindow(QtWidgets.QWidget):
 		self.table_of_records.setColumnWidth(0, 100)
 		self.table_of_records.setColumnWidth(1, 100)
 		self.table_of_records.setColumnWidth(2, 100)
-		self.table_of_records.setColumnWidth(3, 100)
+		self.table_of_records.setColumnWidth(3, 200)
 		self.table_of_records.setColumnWidth(4, 100)
+		self.table_of_records.setColumnWidth(5, 100)
 		#self.table_of_records.resizeRowsToContents()
 		#self.table_of_records.resizeColumnsToContents()
-		self.table_of_records.setRowHeight(0,40)
-		self.table_of_records.setRowHeight(1,40)
-		self.table_of_records.setRowHeight(2,40)
+		#self.table_of_records.setRowHeight(0,40)
+		#self.table_of_records.setRowHeight(1,40)
+		#self.table_of_records.setRowHeight(2,40)
 
 		#self.agm_serial_number = QtWidgets.QLineEdit()
 		#self.form = QtWidgets.QFormLayout()
@@ -279,7 +285,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.vbox_1.insertLayout(0,self.grid)
 		self.vbox_1.insertLayout(1,self.grid_2)
 		#self.vbox_1.insertLayout(2,self.grid_3)#table grid
-		self.vbox_1.addWidget(self.agm_readblock)
+		#self.vbox_1.addWidget(self.agm_readblock)
 		self.vbox_1.insertStretch(3,0)
 		#self.vbox_1.insertLayout(1,self.form)
 		#self.setLayout(self.grid)
@@ -405,6 +411,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_filterbox.setDisabled(True)
 		self.agm_utc.setDisabled(True)		
 		self.ser.close()
+		self.first_load = 0
 		print("Disconnected")
 				
 	def on_activated_com_list(self, str):
@@ -446,22 +453,84 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.graph.clear()
 		self.bar.setValue(0)
 		self.meas_thread.start()
-		
-		self.ser.write(bytearray.fromhex('7f aa 01 01 00 00'))
-		self.read_mcu()
+		if self.first_load == 0:
+			self.ser.write(bytearray.fromhex('7f aa 01 01 00 00'))
+			try:
+				self.ser.read(2)
+				self.first_load = 1
+				time.sleep(0.3)
+
+			except:
+				print("first load failed")
+		if self.first_load == 1:
+			self.ser.write(bytearray.fromhex('7f aa 01 01 00 00'))
+			self.read_mcu()
 
 		#self.data = self.readblock = self.ser.read(2048)
 	
 		#self.agm_readblock.setText(self.readblock.decode("utf-8"))
 		#self.ser.read()
+
+
+	def header_processing(self, current_index,  header, record_length):
+		
+
+		utc_date_str = "{:02d}.{:02d}.{:02d}".format(header[17],header[19],header[21])
+		utc_time_str = "{:02d}:{:02d}:{:02d}".format(header[23],header[25],header[27])
+		if header[3] == 0:
+			utc_signal_type_str = "MAG"
+		if header[3] == 1:
+			utc_signal_type_str = "LF"
+		if header[3] == 2:
+			utc_signal_type_str = "MAG+LF"
+
+		record_len = "{:.2f}sec".format(record_length*0.1)
+		gps_latitude_dir = "N"
+		longitude_dir = "E"
+		if header[9] == 0:
+			gps_latitude_dir = "N"
+		if header[9] == 1:
+			gps_latitude_dir = "S"
+		if header[15] == 0:
+			longitude_dir = "E"
+		if header[15] == 1:
+			longitude_dir = "W"
+		#print(header[9])
+		latitude_hi = header[4]
+		#print(type(latitude_hi), type(header[5]))
+
+		latitude_hi = (latitude_hi<<8)  | header[5]
+		latitude_lo = header[6]
+		latitude_lo = (latitude_lo<<8) | header[7]	
+
+		longitude_hi = 	header[10]
+		longitude_hi = (longitude_hi<<8) | header[11]
+		longitude_lo = 	header[12]
+		longitude_lo = (longitude_lo<<8) | header[13]
+
+		#gps_str = "{:03d},{:03d}{}".format(latitude_hi,latitude_lo,gps_latitude_dir)
+		gps_str = "{:03d},{:03d}{}     {:03d},{:03d}{}".format(latitude_hi, latitude_lo, gps_latitude_dir, longitude_hi, longitude_lo, longitude_dir)	
+		
+		#print(gps_str)	
+		self.table_of_records.setItem(current_index,0,QtWidgets.QTableWidgetItem(utc_date_str))#full date 06.12.19
+		self.table_of_records.setItem(current_index,1,QtWidgets.QTableWidgetItem(utc_time_str))#full time 13:07:22
+		self.table_of_records.setItem(current_index,2,QtWidgets.QTableWidgetItem(utc_signal_type_str))#Type of signal Mag
+		self.table_of_records.setItem(current_index,3,QtWidgets.QTableWidgetItem(gps_str))# GPS data 54,320N\n82,642E 
+		self.table_of_records.setItem(current_index,4,QtWidgets.QTableWidgetItem(record_len))#record time
+		self.table_of_records.setItem(current_index,5,QtWidgets.QTableWidgetItem(""))	#tool passage time
+
 	def data_processing(self, data_from_agm):
+		self.record_index_list = list()
+		self.parsed_data_list = list()
+
 		record_index_list = list()
 		records_parse_data = list()
 
 		for i in range(len(data_from_agm)):
-			if data_from_agm[i] == 0xaa and data_from_agm[i+1] == 0x55:
-				print("captured new record at index - {}".format(i))
-				record_index_list.append(i)
+			if i != (len(data_from_agm) - 1):
+				if data_from_agm[i] == 0xaa and data_from_agm[i+1] == 0x55:
+					print("captured new record at index - {}".format(i))
+					record_index_list.append(i)
 		print(record_index_list)
 
 		for i in range(len(record_index_list)):
@@ -476,8 +545,10 @@ class CommonWindow(QtWidgets.QWidget):
 		print(len(records_parse_data))
 
 		for i in range(len(records_parse_data)):
-			header = records_parse_data[i][:19]
-			temp_data_unparsed = records_parse_data[i][19:]
+			header = records_parse_data[i][:34]
+
+			self.header_processing(i, header, int((len(records_parse_data[i])-34)/2) )
+			temp_data_unparsed = records_parse_data[i][34:]
 			temp_data = list()
 			for j in range(int(len(temp_data_unparsed)/2)):
 				temp_data.append((temp_data_unparsed[2*j]<<8)|(temp_data_unparsed[2*j+1]))
@@ -489,7 +560,7 @@ class CommonWindow(QtWidgets.QWidget):
 		print(os.path.dirname(os.path.abspath(__file__)))	
 		
 	def on_save_to_file(self):
-		#self.read_mcu()
+		
 		self.data_to_file(strftime("%Y-%m-%d_%Hh%Mm%Ss", gmtime()), self.data)	
 
 	def data_to_file(self, name = "agm_data", agm_data=[0,0]):
@@ -508,7 +579,7 @@ class CommonWindow(QtWidgets.QWidget):
 			ba = self.ser.read(4)#mcu send fixed size packet
 			parse_byte_list = list()
 
-			bytes_cnt = int.from_bytes(ba, byteorder='big', signed = False)
+			bytes_cnt = 2*int.from_bytes(ba, byteorder='big', signed = False)
 			print(bytes_cnt)
 
 			ba = self.ser.read(bytes_cnt)#mcu send fixed size packet
@@ -530,7 +601,7 @@ class CommonWindow(QtWidgets.QWidget):
 			#self.com_read_label.adjustSize()			
 			self.data_processing(ba)
 		except:
-			print("Unexpected error")
+			print("Unexpected error, read mcu func")
 
 		
 	def on_meas_completed(self):
@@ -558,7 +629,7 @@ class CommonWindow(QtWidgets.QWidget):
 	def on_change_table_item(self, item):
 		self.previous_row = self.current_row
 		self.current_row = item.row()
-		for j in range(5):
+		for j in range(6):
 			self.table_of_records.item(self.current_row, j).setBackground(QtGui.QColor(100,200,50))
 			if self.previous_row != -1:
 				self.table_of_records.item(self.previous_row, j).setBackground(QtGui.QColor(255,255,255))
@@ -615,7 +686,6 @@ class ppData:
 		
 def serial_ports():
 	""" Lists serial port names
-
 		:raises EnvironmentError:
 			On unsupported or unknown platforms
 		:returns:
