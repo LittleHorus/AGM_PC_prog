@@ -14,7 +14,7 @@ import traceback
 from pyqtgraph.Qt import QtGui, QtCore
 from pyqtgraph.Point import Point
 
-__version__ = '0.2beta'
+__version__ = '0.3beta'
 
 class CommonWindow(QtWidgets.QWidget):
 	"""Класс основного окна программы"""
@@ -22,8 +22,10 @@ class CommonWindow(QtWidgets.QWidget):
 	def __init__(self, parent = None):
 		QtWidgets.QWidget.__init__(self, parent)
 
-		self.data = [2021,2025,2017,2018,2023,2026,2035,2058,2082,2134,2169,2224,2151,2113,2042,2021,2021,2021,2021,2021,2021,2021,2021,2021]#test data value for plot
+		self.data = [0]#test data value for plot
 		self.parsed_data_list = list()
+		self.records_header_list = list()
+		self.records_tool_passage_time = list()
 		self.data_download_done = 0
 		#pg.plot(data)
 		self.record_sampling_time = 0.005
@@ -38,6 +40,8 @@ class CommonWindow(QtWidgets.QWidget):
 		pg.setConfigOption('foreground', 'g')	
 		self.label_graph = pg.LabelItem(text = "x and y", color = "CCFF00")#justify='right'
 		self.graph = pg.PlotWidget(name = self.label_graph)
+		self.lastClicked = []
+		#PlotCurveItem   PlotWidget
 		self.graph.showGrid(1,1,1)
 
 		self.index = 0
@@ -63,9 +67,9 @@ class CommonWindow(QtWidgets.QWidget):
 		#r1.move(800,20)
 		#self.show()
 		
-		#self.graph.plot(data, pen = pg.mkPen('g', width = 4), symbol = 'o', title = "Record №{}".format(self.record_number))
+		self.curve = self.graph.plot(self.data, pen = pg.mkPen('g', width = 4), symbol = 'o', title = "Record №{}".format(self.record_number), clickable=True)
 		#data = [2021,2025,2017,2018,2023,2026,2035,2058,2082,2134,2169,2224,2151,2113,2042,2021,2021,2021,2021,2021,2021,2021,2021,2021]#test data value for plot
-		
+		#self.curve.curve.setClickable(True)
 			
 		self.btnStartMeas = QtWidgets.QPushButton("Start &Measurements")
 		#self.btnStartMeas.setIcon(QtGui.QIcon("icon.png"))
@@ -90,7 +94,7 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		
 		self.label_cord = QtWidgets.QLabel("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
-		self.label_cord.setMaximumSize(220,60)
+		self.label_cord.setMaximumSize(240,60)
 		self.label_cord.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)		
 		self.btn_cord_fixed = QtWidgets.QPushButton("&Capture")
 		self.btn_cord_fixed.setMaximumSize(120,60)
@@ -259,8 +263,8 @@ class CommonWindow(QtWidgets.QWidget):
 		self.grid.addWidget(self.btn_clear,4,2)
 		
 		self.grid_plot_labels.addWidget(self.label_cord, 0, 0)
-		self.grid_plot_labels.addWidget(self.btn_cord_fixed, 0,1)
-		self.grid_plot_labels.addWidget(QtWidgets.QLabel(""),0,2)
+		self.grid_plot_labels.addWidget(self.btn_cord_fixed, 0,2)
+		self.grid_plot_labels.addWidget(QtWidgets.QLabel(""),0,3)
 		self.grid_plot_labels.addWidget(QtWidgets.QLabel(""),0,5)
 		#self.grid_plot_labels.insertStretch(0,4)
 		
@@ -378,7 +382,8 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.comport_combo.activated.connect(self.on_activated_com_list)
 
 		self.proxy = pg.SignalProxy(self.graph.scene().sigMouseMoved, rateLimit=60, slot=self.mouseMoved)
-		
+		#self.curve.sigClicked.connect(self.clicked_point)
+		self.curve.sigPointsClicked.connect(self.clicked_point)
 
 	def on_connected(self):
 		try:
@@ -503,7 +508,7 @@ class CommonWindow(QtWidgets.QWidget):
 		
 
 		utc_date_str = "{:02d}.{:02d}.{:02d}".format(header[17],header[19],header[21])
-		utc_time_str = "{:02d}:{:02d}:{:02d}".format(header[23],header[25],header[27])
+		utc_time_str = "{:02d}:{:02d}:{:02d}.{:03d}".format(header[23],header[25],header[27],(header[28]<<8)|header[29])
 		if header[3] == 0:
 			utc_signal_type_str = "MAG"
 		if header[3] == 1:
@@ -547,8 +552,10 @@ class CommonWindow(QtWidgets.QWidget):
 		self.table_of_records.setItem(current_index,5,QtWidgets.QTableWidgetItem(""))	#tool passage time
 
 	def data_processing(self, data_from_agm):
-		self.record_index_list = list()
+		#self.record_index_list = list()
 		self.parsed_data_list = list()
+		self.records_tool_passage_time = list()
+		self.records_header_list = list()
 
 		record_index_list = list()
 		records_parse_data = list()
@@ -573,6 +580,9 @@ class CommonWindow(QtWidgets.QWidget):
 
 		for i in range(len(records_parse_data)):
 			header = records_parse_data[i][:34]
+			self.records_header_list.append(header)
+
+			self.records_tool_passage_time.append(0)#total length equal to records cnt
 
 			self.header_processing(i, header, int((len(records_parse_data[i])-34)/2) )
 			temp_data_unparsed = records_parse_data[i][34:]
@@ -674,20 +684,23 @@ class CommonWindow(QtWidgets.QWidget):
 	        self.index = int(mousePoint.x())
 	        if self.data_download_done == 1:
 
-	        	self.xpos = int(mousePoint.x())
-	        	self.ypos = self.parsed_data_list[self.current_row][self.xpos]
+	        	xposline = int(mousePoint.x())
+	        	yposline = self.parsed_data_list[self.current_row][xposline]
 	        #print(index)
 	        #if index > 0 and index < len(self.parsed_data_list[self.current_row]):
 	        #    self.label_graph.setText("<span style='font-size: 12pt'>x=%0.1f,   <span style='color: red'>y=%0.1f</span>" % (mousePoint.x(), self.parsed_data_list[self.current_row][index]))
 	        #    print(self.label_graph)
 	        	self.vLine.setPos(mousePoint.x())
-	        	self.hLine.setPos(mousePoint.y())
-	        	self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
+	        	self.hLine.setPos(self.parsed_data_list[self.current_row][xposline])
+	        	#self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
 
 	def on_captured(self):
 		print(self.xpos, self.ypos)
-		temp_timepos = "{:0.2f}sec".format(self.xpos*self.record_sampling_time)
-		self.table_of_records.setItem(self.current_row,5,QtWidgets.QTableWidgetItem(temp_timepos))	#tool passage time
+
+		utc_time_str = "{:02d}:{:02d}:{:02d}.{:03d}".format(self.records_header_list[self.current_row][23],self.records_header_list[self.current_row][25],self.records_header_list[self.current_row][27],(self.records_header_list[self.current_row][28]<<8)|self.records_header_list[self.current_row][29])
+		self.records_tool_passage_time[self.current_row] = utc_time_str
+		#temp_timepos = "{:02d}:{:02d}:{:02d}.{:03d}sec".format(self.xpos*self.record_sampling_time)
+		self.table_of_records.setItem(self.current_row,5,QtWidgets.QTableWidgetItem(utc_time_str))	#tool passage time
 		
 	def closeEvent(self, event):#перехватываем событие закрытия приложения
 		result = QtWidgets.QMessageBox.question(self, "Подтверждение закрытия окна", "Вы действительно хотите закрыть окно?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
@@ -700,6 +713,20 @@ class CommonWindow(QtWidgets.QWidget):
 		else:
 			event.ignore()
 		
+	def clicked_point(self, plot, points):
+	    global lastClicked
+	    for p in self.lastClicked:
+	        p.resetPen()
+	    print("clicked points", points, points[0].pos())
+	    self.xpos = int(points[0].pos()[0])
+	    self.ypos = int(points[0].pos()[1])
+	    print(self.xpos)
+	    self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
+
+	    for p in points:
+	        p.setPen('y', width=5)
+	        #print(p.pos()[0])
+	    self.lastClicked = points
 
 
 class evThread(QtCore.QThread):
