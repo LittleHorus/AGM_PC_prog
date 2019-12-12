@@ -11,6 +11,8 @@ import os
 from time import gmtime, strftime
 import time
 import traceback
+from pyqtgraph.Qt import QtGui, QtCore
+from pyqtgraph.Point import Point
 
 __version__ = '0.2beta'
 
@@ -22,8 +24,9 @@ class CommonWindow(QtWidgets.QWidget):
 
 		self.data = [2021,2025,2017,2018,2023,2026,2035,2058,2082,2134,2169,2224,2151,2113,2042,2021,2021,2021,2021,2021,2021,2021,2021,2021]#test data value for plot
 		self.parsed_data_list = list()
+		self.data_download_done = 0
 		#pg.plot(data)
-		
+		self.record_sampling_time = 0.005
 		#self.label = QtWidgets.QLabel("<b>S21</b> measure only regime")
 		#self.label.setAlignment(QtCore.Qt.AlignHCenter)
 		self.first_load = 0
@@ -33,12 +36,26 @@ class CommonWindow(QtWidgets.QWidget):
 		self.count = 0
 		#pg.setConfigOption('background', 'd')
 		pg.setConfigOption('foreground', 'g')	
-		self.graph = pg.PlotWidget()
+		self.label_graph = pg.LabelItem(text = "x and y", color = "CCFF00")#justify='right'
+		self.graph = pg.PlotWidget(name = self.label_graph)
 		self.graph.showGrid(1,1,1)
-		
+
+		self.index = 0
+		self.graph.setLabel('bottom', "Counts")
+		#self.graph.setLabel('top', self.label_graph)
+		#self.graph.showLabel(show = True)
 		self.graph.setMinimumSize(500,200)
 		self.readblock = 0
 		self.previous_agm_serial_number = "1"
+
+		self.vb = self.graph.plotItem.vb
+
+		self.vLine = pg.InfiniteLine(angle=90, movable=False)
+		self.hLine = pg.InfiniteLine(angle=0, movable=False)
+		self.graph.addItem(self.vLine, ignoreBounds=True)
+		self.graph.addItem(self.hLine, ignoreBounds=True)
+
+
 		#m = PlotCanvas(self, width = 5, height = 4)
 		#m.move(320,20)
 		#self.show()
@@ -62,7 +79,9 @@ class CommonWindow(QtWidgets.QWidget):
 		self.comport_combo.activated[str].connect(self.on_activated_com_list)
 		self.comport_combo.activated[str].connect(self.ComPort)
 
-		
+		self.ypos = 0
+		self.xpos = 0
+
 		vertical_size = 30
 		horizontal_size = 80
 		
@@ -70,6 +89,14 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.LineEdit.setValidator(self.onlyInt)
 		
 		
+		self.label_cord = QtWidgets.QLabel("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
+		self.label_cord.setMaximumSize(220,60)
+		self.label_cord.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)		
+		self.btn_cord_fixed = QtWidgets.QPushButton("&Capture")
+		self.btn_cord_fixed.setMaximumSize(120,60)
+		self.btn_cord_fixed.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+
+
 		self.label_visa_connect = QtWidgets.QLabel("COM port:")
 		self.label_visa_connect.setMaximumSize(horizontal_size,vertical_size)
 		self.label_visa_connect.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
@@ -101,7 +128,7 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.agm_recordbox.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
 		
 		vertical_size = 30
-		horizontal_size = 80
+		horizontal_size = 90
 		
 		self.agm_recordbutton = QtWidgets.QPushButton("Display \nrecord")
 		self.agm_recordbutton.setMaximumSize(horizontal_size,vertical_size)
@@ -160,24 +187,6 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.table_of_records.setItem(0,4,QtWidgets.QTableWidgetItem("2sec"))
 		#self.table_of_records.setItem(0,5,QtWidgets.QTableWidgetItem(""))
 
-		#self.table_of_records.setItem(1,0,QtWidgets.QTableWidgetItem("06.12.19"))
-		#self.table_of_records.setItem(1,1,QtWidgets.QTableWidgetItem("13:07:22"))
-		#self.table_of_records.setItem(1,2,QtWidgets.QTableWidgetItem("Mag"))
-		#self.table_of_records.setItem(1,3,QtWidgets.QTableWidgetItem("54,320N\n82,642E"))
-		#self.table_of_records.setItem(1,4,QtWidgets.QTableWidgetItem("13sec"))
-		#self.table_of_records.setItem(1,5,QtWidgets.QTableWidgetItem(""))
-		
-		#self.table_of_records.setItem(1,0,QtWidgets.QTableWidgetItem("18.11.19"))
-		#self.table_of_records.setItem(1,1,QtWidgets.QTableWidgetItem("21:59:22"))
-		#self.table_of_records.setItem(1,2,QtWidgets.QTableWidgetItem("Mag"))
-		#self.table_of_records.setItem(1,3,QtWidgets.QTableWidgetItem("54,575N\n82,579E"))
-		#self.table_of_records.setItem(1,4,QtWidgets.QTableWidgetItem("15sec"))
-		
-		#self.table_of_records.setItem(2,0,QtWidgets.QTableWidgetItem("18.11.19"))
-		#self.table_of_records.setItem(2,1,QtWidgets.QTableWidgetItem("22:03:39"))
-		#self.table_of_records.setItem(2,2,QtWidgets.QTableWidgetItem("Mag"))
-		#self.table_of_records.setItem(2,3,QtWidgets.QTableWidgetItem("54,575N\n82,579E"))		
-		#self.table_of_records.setItem(2,4,QtWidgets.QTableWidgetItem("49sec"))
 		
 		self.table_of_records.resizeColumnsToContents()
 		self.table_of_records.setColumnWidth(0, 100)
@@ -210,7 +219,7 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.lbl.setPixmap(self.pixmap)
 		
 		
-		self.btn_load = QtWidgets.QPushButton("&Load")
+		self.btn_load = QtWidgets.QPushButton("&Download")
 		self.btn_load.setMaximumSize(horizontal_size,vertical_size)
 		self.btn_load.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 		#self.btn_stop = QtWidgets.QPushButton("S&top")
@@ -223,14 +232,14 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.btn_pause.setMaximumSize(horizontal_size,vertical_size)
 		#self.btn_pause.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)		
 		
-		self.btn_clear = QtWidgets.QPushButton("Clear")
+		self.btn_clear = QtWidgets.QPushButton("Erase")
 		self.btn_clear.setMaximumSize(horizontal_size,vertical_size)
 		self.btn_clear.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 
 		
 		self.grid = QtWidgets.QGridLayout()
 		self.grid_2 = QtWidgets.QGridLayout()
-		#self.grid_3 = QtWidgets.QGridLayout()
+		self.grid_plot_labels = QtWidgets.QGridLayout()
 		
 		
 		self.grid.addWidget(self.label_visa_connect, 0, 0)
@@ -249,7 +258,11 @@ class CommonWindow(QtWidgets.QWidget):
 		self.grid.addWidget(self.btn_save,4,1)
 		self.grid.addWidget(self.btn_clear,4,2)
 		
-
+		self.grid_plot_labels.addWidget(self.label_cord, 0, 0)
+		self.grid_plot_labels.addWidget(self.btn_cord_fixed, 0,1)
+		self.grid_plot_labels.addWidget(QtWidgets.QLabel(""),0,2)
+		self.grid_plot_labels.addWidget(QtWidgets.QLabel(""),0,5)
+		#self.grid_plot_labels.insertStretch(0,4)
 		
 		self.grid.addWidget(self.agm_filterbox,3,1)
 		self.grid.addWidget(self.agm_filter_label,3,0,alignment = QtCore.Qt.AlignCenter | QtCore.Qt.AlignCenter)		
@@ -291,23 +304,33 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.setLayout(self.grid)
 		
 		self.hbox = QtWidgets.QHBoxLayout()
-		self.hbox.addWidget(self.graph)
+		self.vbox_graph_table = QtWidgets.QVBoxLayout()
+
+		self.vbox_graph_table.insertLayout(0,self.grid_plot_labels)
+		self.vbox_graph_table.addWidget(self.graph)
+		self.vbox_graph_table.addWidget(self.table_of_records,1)
+		self.vbox_graph_table.insertStretch(2,0)
 		#self.hbox.addWidget(self.m)
 		self.hbox.insertLayout(0,self.vbox_1)
+		self.hbox.insertLayout(1,self.vbox_graph_table)
 	
-		self.hbox_upper = QtWidgets.QHBoxLayout()
+		self.hbox_2 = QtWidgets.QHBoxLayout()
+		#self.hbox_2.addWidget(QtWidgets.QLabel(""),0)
+		#self.hbox_2.addWidget(QtWidgets.QLabel(""),1)
+		#self.hbox_2.addWidget(QtWidgets.QLabel(""),2)
+		#self.hbox_2.addWidget(self.table_of_records,1)
 
-		#self.hbox_upper.insertSpacing(2,500)
-		#self.hbox_upper.insertStretch(1,0)
+		self.hbox_2.insertSpacing(0,335)
+		self.hbox_2.insertStretch(2,0)
 		#self.hbox_upper.addSpacing(200)
 		
 		self.vbox = QtWidgets.QVBoxLayout()
 		#self.vbox.addWidget(self.label)		
 		#self.vbox.insertLayout(0,self.hbox1)
 		self.vbox.insertLayout(0,self.hbox)
-		#self.vbox.insertLayout(1,self.hbox_upper)
+		self.vbox.insertLayout(1,self.hbox_2)
 		#self.vbox.insertLayout(2,self.grid_3)
-		self.vbox.addWidget(self.table_of_records,1)
+		#self.vbox.addWidget(self.table_of_records,1)
 		self.setLayout(self.vbox)
 		
 
@@ -335,7 +358,7 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		self.agm_serial_number.editingFinished.connect(self.on_change_serial_number)
 
-
+		self.btn_cord_fixed.clicked.connect(self.on_captured)
 		self.btn_load.clicked.connect(self.on_start_load)
 		#self.meas_thread.started.connect(self.on_meas_started)
 		self.meas_thread.finished.connect(self.on_meas_completed)
@@ -353,6 +376,10 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_filterbox.activated.connect(self.on_change_notch_filter)
 		self.agm_utc.activated.connect(self.on_change_utc_timezone)
 		#self.comport_combo.activated.connect(self.on_activated_com_list)
+
+		self.proxy = pg.SignalProxy(self.graph.scene().sigMouseMoved, rateLimit=60, slot=self.mouseMoved)
+		
+
 	def on_connected(self):
 		try:
 			self.ser = serial.Serial(self.ComPort, baudrate=115200, bytesize=serial.EIGHTBITS,
@@ -484,7 +511,7 @@ class CommonWindow(QtWidgets.QWidget):
 		if header[3] == 2:
 			utc_signal_type_str = "MAG+LF"
 
-		record_len = "{:.2f}sec".format(record_length*0.1)
+		record_len = "{:.2f}sec".format(record_length*self.record_sampling_time)
 		gps_latitude_dir = "N"
 		longitude_dir = "E"
 		if header[9] == 0:
@@ -527,8 +554,8 @@ class CommonWindow(QtWidgets.QWidget):
 		records_parse_data = list()
 
 		for i in range(len(data_from_agm)):
-			if i != (len(data_from_agm) - 1):
-				if data_from_agm[i] == 0xaa and data_from_agm[i+1] == 0x55:
+			if i < (len(data_from_agm) - 3):
+				if data_from_agm[i] == 0x00 and data_from_agm[i+1] == 0x00 and data_from_agm[i+2] == 0xaa and data_from_agm[i+3] == 0x55:
 					print("captured new record at index - {}".format(i))
 					record_index_list.append(i)
 		print(record_index_list)
@@ -539,8 +566,8 @@ class CommonWindow(QtWidgets.QWidget):
 				data_len = record_index_list[i+1] - record_index_list[i]
 			if i == (len(record_index_list)-1):
 				data_len = len(data_from_agm) - record_index_list[i]
-			for j in range(data_len-2):
-				temp_list.append(data_from_agm[record_index_list[i]+j+2])
+			for j in range(data_len-4):#last 2 bytes - 0000 start of packet
+				temp_list.append(data_from_agm[record_index_list[i]+j+4])
 			records_parse_data.append(temp_list)
 		print(len(records_parse_data))
 
@@ -555,6 +582,7 @@ class CommonWindow(QtWidgets.QWidget):
 
 			self.parsed_data_list.append(temp_data)
 		print(len(self.parsed_data_list))
+		self.data_download_done = 1
 			
 	def on_get_current_path(self):
 		print(os.path.dirname(os.path.abspath(__file__)))	
@@ -625,7 +653,9 @@ class CommonWindow(QtWidgets.QWidget):
 		self.graph.plot(self.parsed_data_list[self.current_row], pen = pg.mkPen('g', width = 4), symbol = 't', title = "Record №{}".format(self.record_number))
 		self.graph.enableAutoRange(enable=True)
 		self.graph.showGrid(1,1,1)
-	
+		self.graph.addItem(self.vLine, ignoreBounds=True)
+		self.graph.addItem(self.hLine, ignoreBounds=True)		
+		
 	def on_change_table_item(self, item):
 		self.previous_row = self.current_row
 		self.current_row = item.row()
@@ -637,8 +667,27 @@ class CommonWindow(QtWidgets.QWidget):
 			self.on_display_record()
 		
 		
+	def mouseMoved(self, evt):
+	    pos = evt[0]  ## using signal proxy turns original arguments into a tuple
+	    if self.graph.sceneBoundingRect().contains(pos):
+	        mousePoint = self.vb.mapSceneToView(pos)
+	        self.index = int(mousePoint.x())
+	        if self.data_download_done == 1:
 
-	
+	        	self.xpos = int(mousePoint.x())
+	        	self.ypos = self.parsed_data_list[self.current_row][self.xpos]
+	        #print(index)
+	        #if index > 0 and index < len(self.parsed_data_list[self.current_row]):
+	        #    self.label_graph.setText("<span style='font-size: 12pt'>x=%0.1f,   <span style='color: red'>y=%0.1f</span>" % (mousePoint.x(), self.parsed_data_list[self.current_row][index]))
+	        #    print(self.label_graph)
+	        	self.vLine.setPos(mousePoint.x())
+	        	self.hLine.setPos(mousePoint.y())
+	        	self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
+
+	def on_captured(self):
+		print(self.xpos, self.ypos)
+		temp_timepos = "{:0.2f}sec".format(self.xpos*self.record_sampling_time)
+		self.table_of_records.setItem(self.current_row,5,QtWidgets.QTableWidgetItem(temp_timepos))	#tool passage time
 		
 	def closeEvent(self, event):#перехватываем событие закрытия приложения
 		result = QtWidgets.QMessageBox.question(self, "Подтверждение закрытия окна", "Вы действительно хотите закрыть окно?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
@@ -718,7 +767,7 @@ if __name__ == '__main__':
 	
 	app =QtWidgets.QApplication(sys.argv)
 	ex = CommonWindow()
-	ex.setFont(QtGui.QFont('Arial', 10))#, QtGui.QFont.Bold
+	ex.setFont(QtGui.QFont('Arial', 9))#, QtGui.QFont.Bold
 	ex.setWindowTitle("AGM Viewer")
 	ex.comport_combo.addItems(serial_ports())
 	#ex.setFixedSize(500,400)
@@ -727,8 +776,8 @@ if __name__ == '__main__':
 	#ico = QtGui.QIcon("icon.png")
 	#ex.setWindowIcon(ico)#icon for window only
 	#app.setWindowIcon(ico)#icon for application
-
-	
+	#if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+    #    	QtGui.QApplication.instance().exec_()
 	ex.show()
 	sys.exit(app.exec_())#run the cycle of processing the events
 	
