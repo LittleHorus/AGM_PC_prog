@@ -36,6 +36,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.current_row = -1
 		self.record_number = 1
 		self.count = 0
+		self.last_clicked_plot = 0
 		#pg.setConfigOption('background', 'd')
 		pg.setConfigOption('foreground', 'g')	
 		self.label_graph = pg.LabelItem(text = "x and y", color = "CCFF00")#justify='right'
@@ -43,9 +44,9 @@ class CommonWindow(QtWidgets.QWidget):
 		self.lastClicked = []
 		#PlotCurveItem   PlotWidget
 		self.graph.showGrid(1,1,1)
-
+		self.plot_xaxis = list()
 		self.index = 0
-		self.graph.setLabel('bottom', "Counts")
+		self.graph.setLabel('bottom', "Time, sec")
 		#self.graph.setLabel('top', self.label_graph)
 		#self.graph.showLabel(show = True)
 		self.graph.setMinimumSize(500,200)
@@ -54,8 +55,8 @@ class CommonWindow(QtWidgets.QWidget):
 
 		self.vb = self.graph.plotItem.vb
 
-		self.vLine = pg.InfiniteLine(angle=90, movable=False)
-		self.hLine = pg.InfiniteLine(angle=0, movable=False)
+		self.vLine = pg.InfiniteLine(angle=90, movable=False, pen = pg.mkPen('y', width = 3))
+		self.hLine = pg.InfiniteLine(angle=0, movable=False, pen = pg.mkPen('y', width = 3))
 		self.graph.addItem(self.vLine, ignoreBounds=True)
 		self.graph.addItem(self.hLine, ignoreBounds=True)
 
@@ -69,7 +70,7 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		self.curve = self.graph.plot(self.data, pen = pg.mkPen('g', width = 4), symbol = 'o', title = "Record №{}".format(self.record_number), clickable=True)
 		#data = [2021,2025,2017,2018,2023,2026,2035,2058,2082,2134,2169,2224,2151,2113,2042,2021,2021,2021,2021,2021,2021,2021,2021,2021]#test data value for plot
-		#self.curve.curve.setClickable(True)
+		self.curve.curve.setClickable(True)
 			
 		self.btnStartMeas = QtWidgets.QPushButton("Start &Measurements")
 		#self.btnStartMeas.setIcon(QtGui.QIcon("icon.png"))
@@ -85,7 +86,7 @@ class CommonWindow(QtWidgets.QWidget):
 
 		self.ypos = 0
 		self.xpos = 0
-
+		self.cursor_trigger = 0
 		vertical_size = 30
 		horizontal_size = 80
 		
@@ -93,9 +94,9 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.LineEdit.setValidator(self.onlyInt)
 		
 		
-		self.label_cord = QtWidgets.QLabel("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
-		self.label_cord.setMaximumSize(240,60)
-		self.label_cord.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)		
+		#self.label_cord = QtWidgets.QLabel("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
+		#self.label_cord.setMaximumSize(240,60)
+		#self.label_cord.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)		
 		self.btn_cord_fixed = QtWidgets.QPushButton("&Capture")
 		self.btn_cord_fixed.setMaximumSize(120,60)
 		self.btn_cord_fixed.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
@@ -262,8 +263,8 @@ class CommonWindow(QtWidgets.QWidget):
 		self.grid.addWidget(self.btn_save,4,1)
 		self.grid.addWidget(self.btn_clear,4,2)
 		
-		self.grid_plot_labels.addWidget(self.label_cord, 0, 0)
-		self.grid_plot_labels.addWidget(self.btn_cord_fixed, 0,2)
+		#self.grid_plot_labels.addWidget(self.label_cord, 0, 0)
+		self.grid_plot_labels.addWidget(self.btn_cord_fixed, 0,0)
 		self.grid_plot_labels.addWidget(QtWidgets.QLabel(""),0,3)
 		self.grid_plot_labels.addWidget(QtWidgets.QLabel(""),0,5)
 		#self.grid_plot_labels.insertStretch(0,4)
@@ -630,7 +631,7 @@ class CommonWindow(QtWidgets.QWidget):
 
 
 			print(string_for_label)
-			self.data = parse_byte_list
+			#self.data = parse_byte_list
 			if ba != '':
 				self.bar.setValue(100)
 			if ba == b'':
@@ -654,18 +655,23 @@ class CommonWindow(QtWidgets.QWidget):
 		self.meas_thread.running = False
 		
 	def on_display_record(self):
-		#self.parsed_data_list
-		data = [2018,2025,2017,2029,2022,2026,2035,2058,2082,2134,2169,2224,2151,2147, 2148, 2145, 2140, 2134,2113,2042,2021,2021,2024,2021,2021,2016,2013,2007,2001,2002,2001,2001,2001,2001,2001,2001,2001,2001,2001,2001,2001,2001,2001]#test data value for plot
-		for i in range(len(data)):
-			data += np.random.normal(0,1,len(data))
 		self.graph.clear()
 		self.record_number = self.current_row + 1
-		self.graph.plot(self.parsed_data_list[self.current_row], pen = pg.mkPen('g', width = 4), symbol = 't', title = "Record №{}".format(self.record_number))
+		self.cursor_trigger = 0
+		self.xpos = 0
+		self.ypos = 0
+		#self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
 		self.graph.enableAutoRange(enable=True)
 		self.graph.showGrid(1,1,1)
 		self.graph.addItem(self.vLine, ignoreBounds=True)
-		self.graph.addItem(self.hLine, ignoreBounds=True)		
-		
+		self.graph.addItem(self.hLine, ignoreBounds=True)	
+		self.plot_xaxis = list()
+		for i in range(len(self.parsed_data_list[self.current_row])):
+			self.plot_xaxis.append(i*self.record_sampling_time)
+
+		self.curve = self.graph.plot(self.plot_xaxis,self.parsed_data_list[self.current_row], pen = pg.mkPen('g', width = 3,style=QtCore.Qt.DashLine), symbol = 'o', symbolSize = 16, title = "Record №{}".format(self.record_number))
+		self.curve.curve.setClickable(True)
+		self.curve.sigPointsClicked.connect(self.clicked_point)		
 	def on_change_table_item(self, item):
 		self.previous_row = self.current_row
 		self.current_row = item.row()
@@ -682,25 +688,42 @@ class CommonWindow(QtWidgets.QWidget):
 	    if self.graph.sceneBoundingRect().contains(pos):
 	        mousePoint = self.vb.mapSceneToView(pos)
 	        self.index = int(mousePoint.x())
-	        if self.data_download_done == 1:
-
-	        	xposline = int(mousePoint.x())
-	        	yposline = self.parsed_data_list[self.current_row][xposline]
-	        #print(index)
-	        #if index > 0 and index < len(self.parsed_data_list[self.current_row]):
-	        #    self.label_graph.setText("<span style='font-size: 12pt'>x=%0.1f,   <span style='color: red'>y=%0.1f</span>" % (mousePoint.x(), self.parsed_data_list[self.current_row][index]))
-	        #    print(self.label_graph)
+	        if self.data_download_done == 1 and self.cursor_trigger == 0:
+	        	xposline = int(mousePoint.x()/self.record_sampling_time)
+	        	try:
+	        		yposline = self.parsed_data_list[self.current_row][xposline]
+	        	except:
+	        		pass
 	        	self.vLine.setPos(mousePoint.x())
-	        	self.hLine.setPos(self.parsed_data_list[self.current_row][xposline])
+	        	try:
+	        		self.hLine.setPos(self.parsed_data_list[self.current_row][xposline])
+	        	except:
+	        		pass#print("x pos out of range")
 	        	#self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
 
 	def on_captured(self):
-		print(self.xpos, self.ypos)
+		#print(self.xpos, self.ypos)
+		try:
+			sss = (self.records_header_list[self.current_row][28]<<8)|self.records_header_list[self.current_row][29]
+			ss = self.records_header_list[self.current_row][27]
+			mm = self.records_header_list[self.current_row][25]
+			hh = self.records_header_list[self.current_row][23]
 
-		utc_time_str = "{:02d}:{:02d}:{:02d}.{:03d}".format(self.records_header_list[self.current_row][23],self.records_header_list[self.current_row][25],self.records_header_list[self.current_row][27],(self.records_header_list[self.current_row][28]<<8)|self.records_header_list[self.current_row][29])
-		self.records_tool_passage_time[self.current_row] = utc_time_str
-		#temp_timepos = "{:02d}:{:02d}:{:02d}.{:03d}sec".format(self.xpos*self.record_sampling_time)
-		self.table_of_records.setItem(self.current_row,5,QtWidgets.QTableWidgetItem(utc_time_str))	#tool passage time
+			sss = int((sss + self.xpos*5)%1000)
+			ss += int((sss + self.xpos*5)/1000)
+			mm += int((ss/60))
+			ss = int(ss%60)
+			hh += int(mm/60)
+			mm = int(mm%60)
+			hh = int(hh%24)
+
+
+			utc_time_str = "{:02d}:{:02d}:{:02d}.{:03d}".format(hh,mm,ss,sss)
+			self.records_tool_passage_time[self.current_row] = utc_time_str
+			#temp_timepos = "{:02d}:{:02d}:{:02d}.{:03d}sec".format(self.xpos*self.record_sampling_time)
+			self.table_of_records.setItem(self.current_row,5,QtWidgets.QTableWidgetItem(utc_time_str))	#tool passage time
+		except:
+			print("no available data")
 		
 	def closeEvent(self, event):#перехватываем событие закрытия приложения
 		result = QtWidgets.QMessageBox.question(self, "Подтверждение закрытия окна", "Вы действительно хотите закрыть окно?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
@@ -714,19 +737,33 @@ class CommonWindow(QtWidgets.QWidget):
 			event.ignore()
 		
 	def clicked_point(self, plot, points):
-	    global lastClicked
-	    for p in self.lastClicked:
-	        p.resetPen()
-	    print("clicked points", points, points[0].pos())
-	    self.xpos = int(points[0].pos()[0])
-	    self.ypos = int(points[0].pos()[1])
-	    print(self.xpos)
-	    self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
+		global lastClicked
+		if self.last_clicked_plot == self.current_row:
+			try:
+				for p in self.lastClicked:
+					p.resetPen()
+			except:
+				pass
+		if self.last_clicked_plot != self.current_row:
+			self.cursor_trigger = 0
+		if self.cursor_trigger == 0:
+			self.xpos = int(points[0].pos()[0]/self.record_sampling_time)
+			self.ypos = int(points[0].pos()[1])
+			#self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
 
-	    for p in points:
-	        p.setPen('y', width=5)
-	        #print(p.pos()[0])
-	    self.lastClicked = points
+			for p in points:
+				p.setPen(pg.mkPen(color='r', width=4))  #'r', width=5)
+		self.lastClicked = points
+		self.last_clicked_plot = self.current_row	
+		self.cursor_trigger += 1
+		if self.cursor_trigger >= 2:
+			self.cursor_trigger = 0
+
+		self.vLine.setPos(points[0].pos()[0])
+		try:
+			self.hLine.setPos(self.parsed_data_list[self.current_row][self.xpos])
+		except:
+			pass#print("x pos out of range")
 
 
 class evThread(QtCore.QThread):
