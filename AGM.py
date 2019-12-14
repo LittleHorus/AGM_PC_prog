@@ -3,6 +3,7 @@
 
 
 from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtWidgets import QFileDialog
 from PyQt5.QtCore import Qt
 import pyqtgraph as pg 
 import numpy as np
@@ -27,6 +28,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.records_header_list = list()
 		self.records_tool_passage_time = list()
 		self.data_download_done = 0
+		self.data_load_from_file_done = 0
 		#pg.plot(data)
 		self.record_sampling_time = 0.005
 		#self.label = QtWidgets.QLabel("<b>S21</b> measure only regime")
@@ -55,11 +57,13 @@ class CommonWindow(QtWidgets.QWidget):
 
 		self.vb = self.graph.plotItem.vb
 
-		self.vLine = pg.InfiniteLine(angle=90, movable=False, pen = pg.mkPen('y', width = 3))
-		self.hLine = pg.InfiniteLine(angle=0, movable=False, pen = pg.mkPen('y', width = 3))
+		self.vLine = pg.InfiniteLine(angle=90, movable=False, pen = pg.mkPen('y', width = 1))
+		self.hLine = pg.InfiniteLine(angle=0, movable=False, pen = pg.mkPen('y', width = 1))
 		self.graph.addItem(self.vLine, ignoreBounds=True)
 		self.graph.addItem(self.hLine, ignoreBounds=True)
 
+
+		#f(x) = f(x1)+(x-x1)*((f(x2)-f(x1))/(x2-x1)) 
 
 		#m = PlotCanvas(self, width = 5, height = 4)
 		#m.move(320,20)
@@ -68,9 +72,9 @@ class CommonWindow(QtWidgets.QWidget):
 		#r1.move(800,20)
 		#self.show()
 		
-		self.curve = self.graph.plot(self.data, pen = pg.mkPen('g', width = 4), symbol = 'o', title = "Record №{}".format(self.record_number), clickable=True)
+		#self.curve = self.graph.plot(self.data, pen = pg.mkPen('g', width = 4), symbol = 'o', title = "Record №{}".format(self.record_number), clickable=True)
 		#data = [2021,2025,2017,2018,2023,2026,2035,2058,2082,2134,2169,2224,2151,2113,2042,2021,2021,2021,2021,2021,2021,2021,2021,2021]#test data value for plot
-		self.curve.curve.setClickable(True)
+		#self.curve.curve.setClickable(True)
 			
 		self.btnStartMeas = QtWidgets.QPushButton("Start &Measurements")
 		#self.btnStartMeas.setIcon(QtGui.QIcon("icon.png"))
@@ -101,6 +105,12 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_cord_fixed.setMaximumSize(120,60)
 		self.btn_cord_fixed.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 
+		self.btn_load_file = QtWidgets.QPushButton("&Load File")
+		self.btn_load_file.setMaximumSize(80,60)
+		self.btn_load_file.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+		self.btn_clear_table = QtWidgets.QPushButton("Clea&r")
+		self.btn_clear_table.setMaximumSize(80,60)
+		self.btn_clear_table.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)		
 
 		self.label_visa_connect = QtWidgets.QLabel("COM port:")
 		self.label_visa_connect.setMaximumSize(horizontal_size,vertical_size)
@@ -262,7 +272,9 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.grid.addWidget(self.btn_stop,2,1)
 		self.grid.addWidget(self.btn_save,4,1)
 		self.grid.addWidget(self.btn_clear,4,2)
-		
+		self.grid.addWidget(self.btn_clear_table, 5, 1)
+		self.grid.addWidget(self.btn_load_file, 5,0)
+			
 		#self.grid_plot_labels.addWidget(self.label_cord, 0, 0)
 		self.grid_plot_labels.addWidget(self.btn_cord_fixed, 0,0)
 		self.grid_plot_labels.addWidget(QtWidgets.QLabel(""),0,3)
@@ -275,10 +287,10 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		#self.grid_2.addWidget(self.agm_recordbox,0,1)#
 		#self.grid_2.addWidget(self.agm_recordbutton,0,0)#		
-		self.grid_2.addWidget(QtWidgets.QLabel(""),6,0)
-		self.grid_2.addWidget(QtWidgets.QLabel(""),6,1)
-		self.grid_2.addWidget(QtWidgets.QLabel(""),6,2)
-		self.grid_2.addWidget(QtWidgets.QLabel(""),6,3)
+		self.grid_2.addWidget(QtWidgets.QLabel(""),8,0)
+		self.grid_2.addWidget(QtWidgets.QLabel(""),8,1)
+		self.grid_2.addWidget(QtWidgets.QLabel(""),8,2)
+		self.grid_2.addWidget(QtWidgets.QLabel(""),8,3)
 
 
 		self.grid.addWidget(QtWidgets.QLabel(""),6,0)
@@ -286,7 +298,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.grid.addWidget(QtWidgets.QLabel(""),6,2)
 		self.grid.addWidget(QtWidgets.QLabel(""),6,3)
 		
-		self.grid.addWidget(self.bar,5,0,1,5)
+		self.grid.addWidget(self.bar,7,0,1,5)
 		
 		#self.grid_3.addWidget(self.table_of_records,0,0)
 		#self.grid.addWidget(self.lbl_g,10,0,1,5)
@@ -354,13 +366,13 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_utc.setDisabled(True)
 		
 		self.meas_thread = evThread()
-		
-		
+
 		self.btn_visa_connect.clicked.connect(self.on_connected)
 		self.btn_visa_connect.clicked.connect(self.on_get_current_path)
 		self.btn_visa_disconnect.clicked.connect(self.on_disconnected)
 		self.btn_save.clicked.connect(self.on_save_to_file)
-		
+		self.btn_load_file.clicked.connect(self.on_load_from_file) 
+		self.btn_clear_table.clicked.connect(self.on_clear_table)
 		self.agm_serial_number.editingFinished.connect(self.on_change_serial_number)
 
 		self.btn_cord_fixed.clicked.connect(self.on_captured)
@@ -384,7 +396,7 @@ class CommonWindow(QtWidgets.QWidget):
 
 		self.proxy = pg.SignalProxy(self.graph.scene().sigMouseMoved, rateLimit=60, slot=self.mouseMoved)
 		#self.curve.sigClicked.connect(self.clicked_point)
-		self.curve.sigPointsClicked.connect(self.clicked_point)
+		#self.curve.sigPointsClicked.connect(self.clicked_point)
 
 	def on_connected(self):
 		try:
@@ -442,8 +454,11 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_clear.setDisabled(True)
 		self.agm_serial_number.setDisabled(True)
 		self.agm_filterbox.setDisabled(True)
-		self.agm_utc.setDisabled(True)		
-		self.ser.close()
+		self.agm_utc.setDisabled(True)	
+		try:	
+			self.ser.close()
+		except:
+			pass
 		self.first_load = 0
 		print("Disconnected")
 				
@@ -485,6 +500,7 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.label.setText("measure started")
 		#self.graph.clear()
 		self.bar.setValue(0)
+		self.graph.clear()
 		self.meas_thread.start()
 		if self.first_load == 0:
 			self.ser.write(bytearray.fromhex('7f aa 01 01 00 00'))
@@ -506,8 +522,6 @@ class CommonWindow(QtWidgets.QWidget):
 
 
 	def header_processing(self, current_index,  header, record_length):
-		
-
 		utc_date_str = "{:02d}.{:02d}.{:02d}".format(header[17],header[19],header[21])
 		utc_time_str = "{:02d}:{:02d}:{:02d}.{:03d}".format(header[23],header[25],header[27],(header[28]<<8)|header[29])
 		if header[3] == 0:
@@ -528,7 +542,6 @@ class CommonWindow(QtWidgets.QWidget):
 			longitude_dir = "E"
 		if header[15] == 1:
 			longitude_dir = "W"
-		#print(header[9])
 		latitude_hi = header[4]
 		#print(type(latitude_hi), type(header[5]))
 
@@ -540,17 +553,30 @@ class CommonWindow(QtWidgets.QWidget):
 		longitude_hi = (longitude_hi<<8) | header[11]
 		longitude_lo = 	header[12]
 		longitude_lo = (longitude_lo<<8) | header[13]
-
+		#self.records_tool_passage_time
 		#gps_str = "{:03d},{:03d}{}".format(latitude_hi,latitude_lo,gps_latitude_dir)
 		gps_str = "{:03d},{:03d}{}     {:03d},{:03d}{}".format(latitude_hi, latitude_lo, gps_latitude_dir, longitude_hi, longitude_lo, longitude_dir)	
-		
-		#print(gps_str)	
-		self.table_of_records.setItem(current_index,0,QtWidgets.QTableWidgetItem(utc_date_str))#full date 06.12.19
-		self.table_of_records.setItem(current_index,1,QtWidgets.QTableWidgetItem(utc_time_str))#full time 13:07:22
-		self.table_of_records.setItem(current_index,2,QtWidgets.QTableWidgetItem(utc_signal_type_str))#Type of signal Mag
-		self.table_of_records.setItem(current_index,3,QtWidgets.QTableWidgetItem(gps_str))# GPS data 54,320N\n82,642E 
-		self.table_of_records.setItem(current_index,4,QtWidgets.QTableWidgetItem(record_len))#record time
-		self.table_of_records.setItem(current_index,5,QtWidgets.QTableWidgetItem(""))	#tool passage time
+		print(self.records_tool_passage_time[current_index], type(self.records_tool_passage_time[current_index]))
+		if type(self.records_tool_passage_time[current_index]) == str:
+			tool_str = self.records_tool_passage_time[current_index]
+		else:
+			tool_str = ""
+
+		try:
+			self.table_of_records.setItem(current_index,0,QtWidgets.QTableWidgetItem(utc_date_str))#full date 06.12.19
+			self.table_of_records.item(current_index, 0).setTextAlignment(QtCore.Qt.AlignCenter|QtCore.Qt.AlignVCenter)
+			self.table_of_records.setItem(current_index,1,QtWidgets.QTableWidgetItem(utc_time_str))#full time 13:07:22
+			self.table_of_records.item(current_index, 1).setTextAlignment(QtCore.Qt.AlignCenter|QtCore.Qt.AlignVCenter)
+			self.table_of_records.setItem(current_index,2,QtWidgets.QTableWidgetItem(utc_signal_type_str))#Type of signal Mag
+			self.table_of_records.item(current_index, 2).setTextAlignment(QtCore.Qt.AlignCenter|QtCore.Qt.AlignVCenter)
+			self.table_of_records.setItem(current_index,3,QtWidgets.QTableWidgetItem(gps_str))# GPS data 54,320N\n82,642E
+			self.table_of_records.item(current_index, 3).setTextAlignment(QtCore.Qt.AlignCenter|QtCore.Qt.AlignVCenter) 
+			self.table_of_records.setItem(current_index,4,QtWidgets.QTableWidgetItem(record_len))#record time
+			self.table_of_records.item(current_index, 4).setTextAlignment(QtCore.Qt.AlignCenter|QtCore.Qt.AlignVCenter)
+			self.table_of_records.setItem(current_index,5,QtWidgets.QTableWidgetItem(tool_str))	#tool passage time
+			self.table_of_records.item(current_index, 5).setTextAlignment(QtCore.Qt.AlignCenter|QtCore.Qt.AlignVCenter)
+		except:
+			print("table setItem error")
 
 	def data_processing(self, data_from_agm):
 		#self.record_index_list = list()
@@ -593,6 +619,8 @@ class CommonWindow(QtWidgets.QWidget):
 
 			self.parsed_data_list.append(temp_data)
 		print(len(self.parsed_data_list))
+		print(self.records_header_list)
+		print(self.parsed_data_list[0])
 		self.data_download_done = 1
 			
 	def on_get_current_path(self):
@@ -600,18 +628,56 @@ class CommonWindow(QtWidgets.QWidget):
 		
 	def on_save_to_file(self):
 		
-		self.data_to_file(strftime("%Y-%m-%d_%Hh%Mm%Ss", gmtime()), self.data)	
+		self.data_to_file(strftime("%Y-%m-%d_%Hh%Mm%Ss", gmtime()), self.parsed_data_list)	
 
 	def data_to_file(self, name = "agm_data", agm_data=[0,0]):
+		dict_to_save = {'header':self.records_header_list, 'captured_time':self.records_tool_passage_time, 'data':self.parsed_data_list}
+		print(dict_to_save)
+		dict_filename = "{}\\agm_{}.npy".format(os.path.dirname(os.path.abspath(__file__)),name)
 		filename = "{}\\agm_{}.dat".format(os.path.dirname(os.path.abspath(__file__)),name)
 		try:
-
-			np.savetxt(filename, agm_data, delimiter = ',')
+			#for i in range(len(agm_data)):
+			#	np.savetxt(filename, agm_data[i], delimiter = ',')#, fmt='%x')
+				
+			np.save(dict_filename, dict_to_save)
 			print("saved")
+
 		except Exception:
-			traceback.print_exc()
+			pass#traceback.print_exc()
 
+	def on_load_from_file(self):
+		fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')[0]
+		if fname:
+			try:
+				data_dict = np.load(fname, allow_pickle=True)
+				#print(data_dict)
+				self.parsed_data_list = list()
+				self.records_tool_passage_time = list()
+				self.records_header_list = list()
+				self.table_of_records.setRowCount(0)
+				self.table_of_records.setRowCount(200)
+				data_items = data_dict.item()
+				self.graph.clear()
+				self.records_header_list = data_items['header']
+				self.records_tool_passage_time = data_items['captured_time']
+				self.parsed_data_list = data_items['data']	
+				self.data_download_done = 1
+				for i in range(len(data_items['header'])):
+					self.header_processing(i, self.records_header_list[i], int(len(self.parsed_data_list[i])))
+				self.btn_save.setDisabled(False)
+			except:
+				pass								
 
+	def on_clear_table(self):
+		self.table_of_records.setRowCount(0)
+		self.table_of_records.setRowCount(200)
+		self.graph.clear()
+		self.parsed_data_list = list()
+		self.records_tool_passage_time = list()
+		self.records_header_list = list()		
+		self.btn_save.setDisabled(True)
+		self.data_download_done = 0
+		self.data_load_from_file_done = 0
 	def read_mcu(self):
 
 		try:
@@ -649,8 +715,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_clear.setDisabled(False)		
 		#self.btn_save.setDisable(False)
 		
-	def on_save(self):
-		pass
+
 	def on_interrupted(self):
 		self.meas_thread.running = False
 		
@@ -669,7 +734,7 @@ class CommonWindow(QtWidgets.QWidget):
 		for i in range(len(self.parsed_data_list[self.current_row])):
 			self.plot_xaxis.append(i*self.record_sampling_time)
 
-		self.curve = self.graph.plot(self.plot_xaxis,self.parsed_data_list[self.current_row], pen = pg.mkPen('g', width = 3,style=QtCore.Qt.DashLine), symbol = 'o', symbolSize = 16, title = "Record №{}".format(self.record_number))
+		self.curve = self.graph.plot(self.plot_xaxis,self.parsed_data_list[self.current_row], pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10, title = "Record №{}".format(self.record_number))
 		self.curve.curve.setClickable(True)
 		self.curve.sigPointsClicked.connect(self.clicked_point)		
 	def on_change_table_item(self, item):
@@ -680,26 +745,36 @@ class CommonWindow(QtWidgets.QWidget):
 			if self.previous_row != -1:
 				self.table_of_records.item(self.previous_row, j).setBackground(QtGui.QColor(255,255,255))
 		if	self.current_row != self.previous_row:
-			self.on_display_record()
-		
+			try:
+				self.on_display_record()
+			except:
+				pass
 		
 	def mouseMoved(self, evt):
 	    pos = evt[0]  ## using signal proxy turns original arguments into a tuple
-	    if self.graph.sceneBoundingRect().contains(pos):
-	        mousePoint = self.vb.mapSceneToView(pos)
-	        self.index = int(mousePoint.x())
-	        if self.data_download_done == 1 and self.cursor_trigger == 0:
-	        	xposline = int(mousePoint.x()/self.record_sampling_time)
-	        	try:
-	        		yposline = self.parsed_data_list[self.current_row][xposline]
-	        	except:
-	        		pass
-	        	self.vLine.setPos(mousePoint.x())
-	        	try:
-	        		self.hLine.setPos(self.parsed_data_list[self.current_row][xposline])
-	        	except:
-	        		pass#print("x pos out of range")
-	        	#self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
+	    if self.parsed_data_list:
+		    if self.graph.sceneBoundingRect().contains(pos):
+		        mousePoint = self.vb.mapSceneToView(pos)
+		        self.index = int(mousePoint.x())
+		        if (self.data_download_done == 1 or self.data_load_from_file_done == 1) and self.cursor_trigger == 0:
+		        	xposline = int(mousePoint.x()/self.record_sampling_time)
+
+		        	try:
+		        		yposline = self.parsed_data_list[self.current_row][xposline]
+		        	except:
+		        		pass
+		        	self.vLine.setPos(mousePoint.x())
+		        	try:
+		        		#f(x) = f(x1)+(x-x1)*((f(x2)-f(x1))/(x2-x1)) 
+		        		y_interp = 0
+		        		if xposline >= 0 and xposline != (len(self.parsed_data_list[self.current_row])-1):
+		        			y_interp = self.parsed_data_list[self.current_row][xposline] + (mousePoint.x() - (xposline)*self.record_sampling_time)*((self.parsed_data_list[self.current_row][xposline+1]-self.parsed_data_list[self.current_row][xposline])/(self.record_sampling_time))
+		        		#self.hLine.setPos(self.parsed_data_list[self.current_row][xposline])
+		        		self.hLine.setPos(y_interp)
+		        	except Exception:
+		        		pass
+		        		#traceback.print_exc()
+		        	#self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
 
 	def on_captured(self):
 		#print(self.xpos, self.ypos)
@@ -722,9 +797,10 @@ class CommonWindow(QtWidgets.QWidget):
 			self.records_tool_passage_time[self.current_row] = utc_time_str
 			#temp_timepos = "{:02d}:{:02d}:{:02d}.{:03d}sec".format(self.xpos*self.record_sampling_time)
 			self.table_of_records.setItem(self.current_row,5,QtWidgets.QTableWidgetItem(utc_time_str))	#tool passage time
+			self.table_of_records.item(self.current_row, 5).setBackground(QtGui.QColor(100,200,50))
 		except:
 			print("no available data")
-		
+
 	def closeEvent(self, event):#перехватываем событие закрытия приложения
 		result = QtWidgets.QMessageBox.question(self, "Подтверждение закрытия окна", "Вы действительно хотите закрыть окно?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
 		if result == QtWidgets.QMessageBox.Yes:
