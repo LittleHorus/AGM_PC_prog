@@ -361,6 +361,7 @@ void threshold_buffer(uint16_t data_input, uint16_t threshold){
               record_start = 0;
              }
              if((record_start == 0)&&(write_from_buf_cnt<30)){
+               buzzer_alarm = 1;//fix buzzer long record interrupt
                if(write_from_buf_cnt != 0){
                  for(uint8_t fram_i = 0; fram_i <write_from_buf_cnt;fram_i++){
                       fram_write_data(temp_buf[buf_tail++]);
