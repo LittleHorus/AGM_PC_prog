@@ -94,9 +94,11 @@ class CommonWindow(QtWidgets.QWidget):
 		vertical_size = 30
 		horizontal_size = 80
 		
-		self.onlyInt = QtGui.QIntValidator(1,1000)
+		self.onlyInt = QtGui.QIntValidator(1,999)
 		#self.LineEdit.setValidator(self.onlyInt)
-		
+		self.filterSliderLimits = QtGui.QIntValidator(0, 999, self)
+		self.filterSliderLimits.setRange(0,255)
+		self.filterSliderLimits.setTop(255)
 		
 		#self.label_cord = QtWidgets.QLabel("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
 		#self.label_cord.setMaximumSize(240,60)
@@ -124,7 +126,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_visa_disconnect.setDisabled(True)
 		
 		
-		self.agm_serial_number = QtWidgets.QLineEdit("001")#center frequency for nwa
+		self.agm_serial_number = QtWidgets.QLineEdit("001")
 		self.agm_serial_number.setMaximumSize(horizontal_size,vertical_size)
 		self.agm_serial_number.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 		self.agm_serial_number.setValidator(self.onlyInt)
@@ -134,6 +136,23 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_utc.addItems(["UTC+0", "UTC+1", "UTC+2", "UTC+3","UTC+4", "UTC+5","UTC+6","UTC+7","UTC+8", "UTC+9","UTC+10", "UTC+11", "UTC+12"])
 		self.agm_utc.setMaximumSize(horizontal_size,vertical_size)
 		self.agm_utc.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+
+
+		self.agm_filter_configure_line = QtWidgets.QLineEdit()
+		self.agm_filter_configure_line.setMaximumSize(horizontal_size,vertical_size)
+		self.agm_filter_configure_line.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+		self.agm_filter_configure_line.setAlignment(QtCore.Qt.AlignCenter)
+		self.agm_filter_configure_line.setValidator(self.filterSliderLimits)
+		self.agm_filter_configure_line.setPlaceholderText("127")
+
+		self.btn_filter_configure = QtWidgets.QPushButton("SetValue")
+		self.btn_filter_configure.setMaximumSize(horizontal_size,vertical_size)
+		self.btn_filter_configure.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)#Fixed		
+		self.btn_filter_configure.setDisabled(True)
+
+		self.agm_filter_configure_label = QtWidgets.QLabel("ADC:0000")
+		self.agm_filter_configure_label.setMaximumSize(horizontal_size,vertical_size)
+		self.agm_filter_configure_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Maximum)
 
 		#vertical_size = 30
 		#horizontal_size = 200		
@@ -292,13 +311,15 @@ class CommonWindow(QtWidgets.QWidget):
 		self.grid_2.addWidget(QtWidgets.QLabel(""),8,2)
 		self.grid_2.addWidget(QtWidgets.QLabel(""),8,3)
 
-
-		self.grid.addWidget(QtWidgets.QLabel(""),6,0)
-		self.grid.addWidget(QtWidgets.QLabel(""),6,1)
-		self.grid.addWidget(QtWidgets.QLabel(""),6,2)
-		self.grid.addWidget(QtWidgets.QLabel(""),6,3)
+		self.grid.addWidget(self.agm_filter_configure_line,6,0)
+		self.grid.addWidget(self.btn_filter_configure,6,1)
+		self.grid.addWidget(self.agm_filter_configure_label,6,2)
+		self.grid.addWidget(QtWidgets.QLabel(""),7,0)
+		self.grid.addWidget(QtWidgets.QLabel(""),7,1)
+		self.grid.addWidget(QtWidgets.QLabel(""),7,2)
+		self.grid.addWidget(QtWidgets.QLabel(""),7,3)
 		
-		self.grid.addWidget(self.bar,7,0,1,5)
+		self.grid.addWidget(self.bar,8,0,1,5)
 		
 		#self.grid_3.addWidget(self.table_of_records,0,0)
 		#self.grid.addWidget(self.lbl_g,10,0,1,5)
@@ -370,7 +391,8 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_visa_connect.clicked.connect(self.on_connected)
 		self.btn_visa_connect.clicked.connect(self.on_get_current_path)
 		self.btn_visa_disconnect.clicked.connect(self.on_disconnected)
-		self.btn_save.clicked.connect(self.on_save_to_file)
+		#self.btn_save.clicked.connect(self.on_save_to_file)
+		self.btn_save.clicked.connect(self.on_save_file_dialog)
 		self.btn_load_file.clicked.connect(self.on_load_from_file) 
 		self.btn_clear_table.clicked.connect(self.on_clear_table)
 		self.agm_serial_number.editingFinished.connect(self.on_change_serial_number)
@@ -401,7 +423,7 @@ class CommonWindow(QtWidgets.QWidget):
 	def on_connected(self):
 		try:
 			self.ser = serial.Serial(self.ComPort, baudrate=115200, bytesize=serial.EIGHTBITS,
-									 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 0.5)
+									 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 2)
 			
 			self.ser.isOpen()  # try to open port
 			print("Connected to {}".format(self.ComPort))
@@ -423,8 +445,6 @@ class CommonWindow(QtWidgets.QWidget):
 			print("Unexpected error, Null ComName")
 	def on_change_serial_number(self):
 		if self.agm_serial_number.text() != self.previous_agm_serial_number:
-
-			
 			adr_hi_byte = ((int)(self.agm_serial_number.text())>>8)&0xFF
 			adr_lo_byte = ((int)(self.agm_serial_number.text())&0xff)
 			print(bytearray.fromhex('7f aa 01 02 {:02X} {:02X}'.format(adr_hi_byte, adr_lo_byte)))
@@ -477,7 +497,7 @@ class CommonWindow(QtWidgets.QWidget):
 			self.btn_visa_connect.setDisabled(False)
 				
 	def on_clear(self):
-		clear_res = QtWidgets.QMessageBox.question(self, "Подтверждение стирания памяти МК", "Вы действительно хотите стереть данные?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
+		clear_res = QtWidgets.QMessageBox.question(self, "Подтверждение стирания памяти МК", "Очистить память модуля?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
 		if clear_res == QtWidgets.QMessageBox.Yes:
 			#self.graph.clear()
 			#self.bar.setValue(0)
@@ -615,7 +635,8 @@ class CommonWindow(QtWidgets.QWidget):
 			temp_data_unparsed = records_parse_data[i][34:]
 			temp_data = list()
 			for j in range(int(len(temp_data_unparsed)/2)):
-				temp_data.append((temp_data_unparsed[2*j]<<8)|(temp_data_unparsed[2*j+1]))
+				if ((temp_data_unparsed[2*j]<<8)|(temp_data_unparsed[2*j+1])) != 0x7faa:
+					temp_data.append((temp_data_unparsed[2*j]<<8)|(temp_data_unparsed[2*j+1]))
 
 			self.parsed_data_list.append(temp_data)
 		print(len(self.parsed_data_list))
@@ -628,7 +649,8 @@ class CommonWindow(QtWidgets.QWidget):
 		
 	def on_save_to_file(self):
 		
-		self.data_to_file(strftime("%Y-%m-%d_%Hh%Mm%Ss", gmtime()), self.parsed_data_list)	
+		self.data_to_file(strftime("%Y-%m-%d_%Hh%Mm%Ss", gmtime()), self.parsed_data_list)
+		self.on_save_file_dialog()	
 
 	def data_to_file(self, name = "agm_data", agm_data=[0,0]):
 		dict_to_save = {'header':self.records_header_list, 'captured_time':self.records_tool_passage_time, 'data':self.parsed_data_list}
@@ -638,7 +660,6 @@ class CommonWindow(QtWidgets.QWidget):
 		try:
 			#for i in range(len(agm_data)):
 			#	np.savetxt(filename, agm_data[i], delimiter = ',')#, fmt='%x')
-				
 			np.save(dict_filename, dict_to_save)
 			print("saved")
 
@@ -668,6 +689,22 @@ class CommonWindow(QtWidgets.QWidget):
 			except:
 				pass								
 
+	def on_save_file_dialog(self):
+		options = QFileDialog.Options()
+		#options |= QFileDialog.DontUseNativeDialog
+
+		fname = QFileDialog.getSaveFileName(self, 'Save File','agm_', "NPY (*.npy)",options = options)[0]
+		if fname:
+			print(fname)
+			try:
+				dict_to_save = {'header':self.records_header_list, 'captured_time':self.records_tool_passage_time, 'data':self.parsed_data_list}
+				np.save(fname, dict_to_save)
+				pass
+
+			except:
+				print("save file error")
+		
+
 	def on_clear_table(self):
 		self.table_of_records.setRowCount(0)
 		self.table_of_records.setRowCount(200)
@@ -679,7 +716,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.data_download_done = 0
 		self.data_load_from_file_done = 0
 	def read_mcu(self):
-
 		try:
 			ba = self.ser.read(4)#mcu send fixed size packet
 			parse_byte_list = list()
@@ -802,7 +838,7 @@ class CommonWindow(QtWidgets.QWidget):
 			print("no available data")
 
 	def closeEvent(self, event):#перехватываем событие закрытия приложения
-		result = QtWidgets.QMessageBox.question(self, "Подтверждение закрытия окна", "Вы действительно хотите закрыть окно?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
+		result = QtWidgets.QMessageBox.question(self, "Выход из программы", "Выйти из программы?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
 		if result == QtWidgets.QMessageBox.Yes:
 		
 			self.hide()
