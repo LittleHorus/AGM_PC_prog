@@ -94,7 +94,16 @@ uint16_t gnss_startup_delay = 0;
 uint8_t transmitBuffer[32];
 uint8_t receiveBuffer[200], baudrate_status[100], gnss_power_status[50];
 
+uint8_t rtc_lse_error = 0;
+
 uint8_t usb_sending_data = 0;
+uint8_t notch_filter_configure = 0, adc_m_cnt = 0;   
+uint8_t notch_50Hz_value = 90, notch_60Hz_value = 51;
+uint8_t notch_type = 0;
+uint16_t adc_m[25];
+
+uint16_t record_start_delay_cnt = 0; 
+uint8_t record_start_delay_done = 0;
 
 uint8_t at_wakeup_try = 3;
 uint8_t gps_latch_done = 0, gps_latch_cnt = 0;
@@ -159,6 +168,8 @@ uint8_t key3_lock = 0, key3_long_press_enable = 0, key3_short_press_enable = 0, 
 
 uint8_t fram_erase_event = 0, gps_event = 0, gsm_event = 0, notch_filter_event = 0;
 uint8_t sensitivity_mag_event = 0;
+
+uint8_t fram_gps_state = 0;
 
 uint16_t sram_tx_buf[10];
 uint16_t sram_rx_buf[10];
@@ -294,6 +305,9 @@ void threshold_buffer(uint16_t data_input, uint16_t threshold){
             if(temp_buf[iminmax] < temp_min_value) temp_min_value = temp_buf[iminmax];
           }
           //Exceed threshold? yes -> send from buff, no stop writing
+          
+         
+          
           if((temp_max_value - temp_min_value) > threshold){
             if(write_from_buf_cnt >= 30){
               temp_fram_write_event = 1;
@@ -405,7 +419,7 @@ void timer_init(){
   TIM_InitStructure.Autoreload = 99;
   TIM_InitStructure.ClockDivision = LL_TIM_CLOCKDIVISION_DIV1;
   TIM_InitStructure.CounterMode = LL_TIM_COUNTERMODE_UP;
-  TIM_InitStructure.Prescaler = 71;//1MHz clk
+  TIM_InitStructure.Prescaler = 79;//71  1MHz clk
   //TIM_InitStructure.RepetitionCounter = 0x00;
   LL_TIM_Init(TIM7, &TIM_InitStructure);
  
@@ -423,7 +437,7 @@ void timer_init(){
 /******************************************************************************/
 void I2C_SetNotchFreq(I2C_HandleTypeDef hi, uint8_t DEV_ADDR, uint8_t sizebuf){
     while(HAL_I2C_Master_Transmit(&hi, (uint16_t)DEV_ADDR,(uint8_t*) &I2C_TxBuffer_Notch, (uint16_t)sizebuf, (uint32_t)1000)!= HAL_OK){
-        if (HAL_I2C_GetError(&hi) != HAL_I2C_ERROR_AF);
+        if (HAL_I2C_GetError(&hi) == HAL_I2C_ERROR_AF)break;
     }
 }
 /******************************************************************************/
@@ -433,7 +447,7 @@ void I2C_ReadBuffer(I2C_HandleTypeDef hi, uint8_t DEV_ADDR, uint8_t sizebuf){
 /******************************************************************************/
 void I2C_WriteBuffer(I2C_HandleTypeDef hi, uint8_t DEV_ADDR, uint8_t sizebuf){
     while(HAL_I2C_Master_Transmit(&hi, (uint16_t)DEV_ADDR,(uint8_t*) &I2C_TxBuffer, (uint16_t)sizebuf, (uint32_t)1000)!= HAL_OK){
-        if (HAL_I2C_GetError(&hi) != HAL_I2C_ERROR_AF);
+        if (HAL_I2C_GetError(&hi) == HAL_I2C_ERROR_AF)break;
     }
 }
 /******************************************************************************/
@@ -553,7 +567,35 @@ void usb_tx(){
         if(UserRxBufferFS[3] == 0x05){//utc timezone
 
           //CDC_Transmit_FS(UserTxBufferFS, 2048);
-        }       
+        }
+        if(UserRxBufferFS[3] == 0x06){//afe configure
+
+          I2C_TxBuffer_Notch[0] = 0x10;
+          I2C_TxBuffer_Notch[1] = UserRxBufferFS[4];
+          I2C_SetNotchFreq(hi2c1, 0x5e, 2);
+          
+          notch_filter_configure = 1;
+          while(notch_filter_configure == 1);
+          UserTxBufferFS[0] = 0x00;
+          UserTxBufferFS[1] = 0x00;
+          UserTxBufferFS[2] = 0xaa;
+          UserTxBufferFS[3] = 0x5e;
+          for(uint8_t notch_i = 0; notch_i < 20; notch_i++){
+            
+            UserTxBufferFS[2*notch_i+4] = (uint8_t)(adc_m[notch_i]>>8);
+            UserTxBufferFS[2*notch_i+1+4] = (uint8_t)(adc_m[notch_i]&0xff);
+          }
+       
+          CDC_Transmit_FS(UserTxBufferFS, 64);
+        }
+        if(UserRxBufferFS[3] == 0x07){//update notch filter potentiometr value
+          if(UserRxBufferFS[4] == 0) notch_50Hz_value = UserRxBufferFS[5];//50Hz 
+          if(UserRxBufferFS[4] == 1) notch_60Hz_value = UserRxBufferFS[5];//60Hz
+          fram_write_settings(((notch_50Hz_value<<8)|(notch_60Hz_value)), 9);
+          
+        }
+        
+        
         
         //clear start byte to prevent double proc
         UserRxBufferFS[0] = 0x00;
@@ -574,6 +616,7 @@ int main(void)
   MX_I2C1_Init();
   MX_ADC1_Init();
   MX_RTC_Init();
+  //if(!(*(volatile uint32_t *) (BDCR_RTCEN_BB)))__HAL_RCC_RTC_ENABLE();
   MX_USB_DEVICE_Init();
 
   _fram_address_cnt = fram_read_settings(6);
@@ -582,10 +625,15 @@ int main(void)
   card_watcher = _fram_address_cnt;
   record_number = fram_read_settings(8); 
   agm.serial_number = fram_read_settings(10);
+  notch_50Hz_value = (uint8_t)(fram_read_settings(9)>>8);
+  notch_60Hz_value = (uint8_t)(fram_read_settings(9)&0xff);
+  notch_type = (uint8_t)(fram_read_settings(11)&0xff);
+  fram_gps_state = (uint8_t)(fram_read_settings(11)>>8);
   if(agm.serial_number > 999) agm.serial_number = 1;
   timer_init();
   HAL_GPIO_WritePin(GSM_RST_GPIO_Port, GSM_RST_Pin, GPIO_PIN_RESET);//active power level
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);//OLED reset pin
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);//DTR low to normal work MC60
   oled_init();
   oled_logo();
   logo_delay = 30000;
@@ -593,17 +641,20 @@ int main(void)
   agm.battery = BATTERY_FULL;
   agm.connection = NO_CONNECTION;
   agm.event = NO_EVENT;
-  agm.gnss = GPS_OFF;
+  //agm.gnss = GPS_OFF;
   agm.gsm = GSM_DISABLE;
   agm.memory = MEMORY_EMPTY;
   agm.signal = SIGNAL_MAG;
   agm.state = STATE_STANDBY;
   
+  
+  
+  
   agm_option_menu.record_mode = 0;
   agm_option_menu.sensitivity_mag = 1;
   agm_option_menu.sensitivity_lf = 10;
   agm_option_menu.data_interface = 0;
-  agm_option_menu.gps_glonass = 0;
+  //agm_option_menu.gps_glonass = 0;
   agm_option_menu.gsm_gprs = 0;
   agm_option_menu.notch_filter = 0;
   agm_option_menu.erase_data = 0;
@@ -611,10 +662,56 @@ int main(void)
   
   LL_ADC_REG_StartConversion(ADC1);
 
-  //I2C_TxBuffer_Notch[0] = 0x10;
-  //I2C_TxBuffer_Notch[1] = 90;//50Hz
-  //I2C_SetNotchFreq(hi2c1, 0x5e, 2);  
+  I2C_TxBuffer_Notch[0] = 0x10;
+  if((notch_type == 0)||(notch_type == 0xff))I2C_TxBuffer_Notch[1] = notch_50Hz_value;//50Hz
+  else I2C_TxBuffer_Notch[1] = notch_60Hz_value;//60Hz
+  I2C_SetNotchFreq(hi2c1, 0x5e, 2);  
   
+  agm_option_menu.sensitivity_mag = (uint8_t)(fram_read_settings(12));
+  agm_option_menu.sensitivity_lf = (uint8_t)(fram_read_settings(12)>>8);
+  if(agm_option_menu.sensitivity_lf == 0xff)agm_option_menu.sensitivity_lf = 0;
+  if((agm_option_menu.sensitivity_mag != 10)&&(agm_option_menu.sensitivity_mag <11)) {
+    I2C_TxBuffer[0] = 0x10;
+    //G = 1,2,3,4,5,7,9,12,15,20
+    if(agm_option_menu.sensitivity_mag == 0) I2C_TxBuffer[1] = 17;
+    if(agm_option_menu.sensitivity_mag == 1) I2C_TxBuffer[1] = 13;
+    if(agm_option_menu.sensitivity_mag == 2) I2C_TxBuffer[1] = 10;
+    if(agm_option_menu.sensitivity_mag == 3) I2C_TxBuffer[1] = 9;
+    if(agm_option_menu.sensitivity_mag == 4) I2C_TxBuffer[1] = 8;
+    if(agm_option_menu.sensitivity_mag == 5) I2C_TxBuffer[1] = 7;
+    if(agm_option_menu.sensitivity_mag == 6) I2C_TxBuffer[1] = 6;
+    if(agm_option_menu.sensitivity_mag == 7) I2C_TxBuffer[1] = 5;
+    if(agm_option_menu.sensitivity_mag == 8) I2C_TxBuffer[1] = 4;
+    if(agm_option_menu.sensitivity_mag == 9) I2C_TxBuffer[1] = 3;
+    
+    I2C_WriteBuffer(hi2c1, 0x58, 2);    
+  }
+  else{
+    agm_option_menu.sensitivity_mag = 0;
+  }
+  
+  if(fram_gps_state == 0){
+    agm_option_menu.gps_glonass = 0;
+  }
+  if(fram_gps_state == 1){
+    
+    agm_option_menu.gps_glonass = 1;
+    gps_event = 1;
+  }
+  
+  
+  
+  /*
+  agm_option_menu.gps_glonass = (uint8_t)(fram_read_settings(13));
+  agm_option_menu.gsm_gprs = (uint8_t)(fram_read_settings(13)>>8); 
+  agm_option_menu.record_mode = (uint8_t)(fram_read_settings(14)>>8); 
+  
+  if(agm_option_menu.gps_glonass == 0xff) agm_option_menu.gps_glonass = 0;
+  if(agm_option_menu.gsm_gprs == 0xff) agm_option_menu.gsm_gprs = 0;
+  if(agm_option_menu.record_mode == 0xff) agm_option_menu.record_mode = 0;
+  */
+  
+    
   //AFE_gain_auto();
   uint32_t usb_delay = 0;
   
@@ -626,71 +723,9 @@ int main(void)
       usb_tx();
     }
     
+    if(sleep_mode_state == 1) if(menu_level == MAIN_MENU) menu_level = STANDBY_MENU;
     
-    
-    /*
-    //usb section
-    if(((UserRxBufferFS[0] == 0x7f) && (UserRxBufferFS[1] == 0xaa))||(usb_sending_data == 1)){
-     
-      if(UserRxBufferFS[3] == 0x01){//opCode for sending records data
-        //temp_recordCnt = fram_read_settings(6);
-        temp_recordCnt = fram_read_settings(7);
-        //if(temp_recordCnt >= 1024)temp_recordCnt = 1024;
-        fram_read_buf(temp_dataRecord, 64, 0);
-        UserTxBufferFS[0] = (uint8_t)(temp_recordCnt>>24);
-        UserTxBufferFS[1] = (uint8_t)(temp_recordCnt>>16);
-        UserTxBufferFS[2] = (uint8_t)(temp_recordCnt>>8);
-        UserTxBufferFS[3] = (uint8_t)(temp_recordCnt&0xff);
-        //UserTxBufferFS[4] = 0xaa;
-        //UserTxBufferFS[5] = 0x55;
-        //UserTxBufferFS[6] = 0x01;
-        //UserTxBufferFS[7] = 0x02;
-        for(uint8_t usb_i = 0; usb_i < 28; usb_i++){
-          UserTxBufferFS[2*usb_i+4] = (uint8_t)(temp_dataRecord[usb_i]>>8);
-          UserTxBufferFS[2*usb_i+5] = (uint8_t)(temp_dataRecord[usb_i]&0xff);
-          
-        }
-        
-        for(uint32_t i_usb = 0; i_usb<(2*temp_recordCnt);i_usb++){
-          UserTxBufferFS[2*i_usb+4] = (uint8_t)(temp_dataRecord[i_usb]>>8);
-          UserTxBufferFS[2*i_usb+5] = (uint8_t)(temp_dataRecord[i_usb]&0xff);
-        }
-        
-        
-        //USBD_CDC_SetTxBuffer(&hUsbDeviceFS, &UserTxBufferFS[0], 64);
-        //USBD_CDC_TransmitPacket(&hUsbDeviceFS);        
-        CDC_Transmit_FS(UserTxBufferFS, 64);
-        //CDC_Transmit_FS(UserTxBufferFS, 64);
-     
-      }//opcode 0x01
-      if(UserRxBufferFS[3] == 0x02){
-        agm.serial_number = (UserRxBufferFS[4]<<8)|(UserRxBufferFS[5]);
-        fram_write_settings(agm.serial_number, 10);
-        
-        //CDC_Transmit_FS(UserTxBufferFS, 2048);
-      }
-      if(UserRxBufferFS[3] == 0x03){
-        //agm.serial_number = (UserRxBufferFS[4]<<8)|(UserRxBufferFS[5]);
-        //fram_write_settings(agm.serial_number, 10);
-        fram_erase_event = 1;
-        //CDC_Transmit_FS(UserTxBufferFS, 2048);
-      }
-      if(UserRxBufferFS[3] == 0x04){
-        notch_filter_event = 1; 
-        if(UserRxBufferFS[4] == 0x00)agm_option_menu.notch_filter = 0;//50Hz
-        if(UserRxBufferFS[4] == 0x01)agm_option_menu.notch_filter = 1;//60Hz
-        //CDC_Transmit_FS(UserTxBufferFS, 2048);
-      }  
-      if(UserRxBufferFS[3] == 0x05){//utc timezone
 
-        //CDC_Transmit_FS(UserTxBufferFS, 2048);
-      }       
-      
-      //clear start byte to prevent double proc
-      UserRxBufferFS[0] = 0x00;
-
-    }//usb receive cmd
-    */
     
     
     if(time_update_cnt == 0){
@@ -772,7 +807,7 @@ int main(void)
         agm.gnss = GPS_ON;
         
         gps_latch_cnt++;
-        if(gps_latch_cnt > 3){
+        if(gps_latch_cnt >= 3){
           gps_latch_cnt = 0;
           gps_latch_done = 1;
         }
@@ -828,7 +863,7 @@ int main(void)
         //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+IFC=0,0\r\n", 12);
         //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+QGNSSC=1\r\n", 13);
         //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT\r\n", 4);
-        gps_update_data_timer = 50000;
+        gps_update_data_timer = 30000;
         HAL_UART_Receive_IT(&huart2, (uint8_t*)buff, 1);
         agm.gnss = GPS_WAIT_DATA;
         at_wakeup_try = 3;
@@ -850,6 +885,7 @@ int main(void)
       if(gnss_startup_state == 0){
         HAL_GPIO_WritePin(GSM_RST_GPIO_Port, GSM_RST_Pin, GPIO_PIN_RESET);
         pwrup_seq_done = 0;
+        gps_latch_timer = 0;
       } 
     }    
       
@@ -859,12 +895,14 @@ int main(void)
       if(at_wakeup_try == 3) {
         at_wakeup_try--;
         //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT\r\n", 4);
-        HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+CFUN=0\r\n", 11);
+        //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+QSCLK=1\r\n", 12);
+        HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+CFUN=1\r\n", 11);
       }
       else if(at_wakeup_try == 2) {
         at_wakeup_try--;
         //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT\r\n", 4);
-        HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+CFUN?\r\n", 10);
+        //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+CFUN=4\r\n", 11);
+        HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+QSCLK=1\r\n", 12);
       }      
       else if(at_wakeup_try == 1) {
         at_wakeup_try--;
@@ -876,16 +914,24 @@ int main(void)
         //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+QGNSSC=1\r\n", 13);
         if(gps_latch_done == 0){
           HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+QGNSSRD=\"NMEA/RMC\"\r\n", 23);
-
+          
+          
+          //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+QSCLK?\r\n", 11);
+          //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
         }
         if(gps_latch_done == 1){
+          //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+QSCLK=1\r\n", 12);
           HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+QGNSSC=0\r\n", 13);
-          gps_latch_timer = 12000000;//2 min          
+          //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"$PMTK161,0*28\r\n", 15);
+          //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+CFUN=4\r\n", 11);
+          
+          gps_latch_timer = 1200000;//2 min 
+          gps_latch_done = 0;
           
         }
       }
       
-      gps_update_data_timer = 100000;//10sec
+      gps_update_data_timer = 15000;//3sec
  
     }
     /*
@@ -909,9 +955,11 @@ int main(void)
       if(agm.state == STATE_STANDBY){
         if(mag_sens_auto_enable == 1)AFE_gain_auto();
         agm_standby_active_mode = MODE_ACTIVE;
+        record_start_delay_cnt = 30001;//3sec
         agm.state = STATE_ACTIVE;
       }
       else{
+        record_start_delay_done = 0;
         agm_standby_active_mode = MODE_STANDBY;
         agm.state = STATE_STANDBY;        
       }
@@ -994,10 +1042,21 @@ int main(void)
         if(menu_ring_cnt == 5) {
           agm_option_menu.gps_glonass++;
           if(agm_option_menu.gps_glonass > 1) agm_option_menu.gps_glonass = 0;
-          if(agm_option_menu.gps_glonass == 0){agm.gnss = GPS_OFF;check_powerdown_gps = 1;}
+          uint16_t temp_fram_notch_gps = 0;
+          if(agm_option_menu.gps_glonass == 0){
+            agm.gnss = GPS_OFF;
+            check_powerdown_gps = 1;
+            temp_fram_notch_gps = fram_read_settings(11);
+            temp_fram_notch_gps &= 0x00ff;
+            fram_write_settings((uint16_t)(temp_fram_notch_gps), 11);             
+          }
           if(agm_option_menu.gps_glonass == 1){
             agm.gnss = GPS_ON;
             gps_event = 1;
+            temp_fram_notch_gps = (0x00ff&fram_read_settings(11));
+            temp_fram_notch_gps |= 0x100;
+            fram_write_settings((uint16_t)(temp_fram_notch_gps), 11);             
+            
           }          
         }
         if(menu_ring_cnt == 6) {
@@ -1054,19 +1113,32 @@ int main(void)
         if(menu_ring_cnt == 4){
           if(agm_option_menu.gsm_gprs == 0) agm_option_menu.gsm_gprs = 2;
           agm_option_menu.gsm_gprs--;
+          
           if(agm_option_menu.gsm_gprs == 0)agm.gsm = GSM_DISABLE;
           if(agm_option_menu.gsm_gprs == 1){
             if(gsm_event == 0)agm.gsm = GSM_NO_CONNECTION;
-            
+
             gsm_event = 1;
           }          
         }
         if(menu_ring_cnt == 5){
           if(agm_option_menu.gps_glonass == 0) agm_option_menu.gps_glonass = 2;
           agm_option_menu.gps_glonass--;
-          if(agm_option_menu.gps_glonass == 0){agm.gnss = GPS_OFF;check_powerdown_gps = 1;}
+          uint16_t temp_fram_notch_gps = 0;
+          if(agm_option_menu.gps_glonass == 0){
+            agm.gnss = GPS_OFF;
+            check_powerdown_gps = 1;
+            temp_fram_notch_gps = (0x00ff&fram_read_settings(11));
+            //temp_fram_notch_gps |= 0x0ff;
+            fram_write_settings((uint16_t)(temp_fram_notch_gps), 11);            
+            
+          }
           if(agm_option_menu.gps_glonass == 1){
             agm.gnss = GPS_ON;
+            
+            temp_fram_notch_gps = (0x00ff&fram_read_settings(11));
+            temp_fram_notch_gps |= 0x100;
+            fram_write_settings((uint16_t)(temp_fram_notch_gps), 11);            
             gps_event = 1;
           }
           
@@ -1109,23 +1181,23 @@ int main(void)
   }  
   if((notch_filter_event == 1) && (menu_level != SUB_OPTION_MENU)){
     I2C_TxBuffer_Notch[0] = 0x10;
-    if(agm_option_menu.notch_filter == 0)I2C_TxBuffer_Notch[1] = 90;//50Hz
-    if(agm_option_menu.notch_filter == 1)I2C_TxBuffer_Notch[1] = 51;//60Hz
+    if(agm_option_menu.notch_filter == 0){I2C_TxBuffer_Notch[1] = notch_50Hz_value;notch_type = 0;fram_write_settings((uint16_t)(notch_type), 11);}//50Hz
+    if(agm_option_menu.notch_filter == 1){I2C_TxBuffer_Notch[1] = notch_60Hz_value;notch_type = 1;fram_write_settings((uint16_t)(notch_type), 11);}//60Hz
     I2C_SetNotchFreq(hi2c1, 0x5e, 2);      
     notch_filter_event = 0;
   }
   if((sensitivity_mag_event == 1) && (menu_level != SUB_OPTION_MENU)){
-    if(agm_option_menu.sensitivity_mag == 0){I2C_TxBuffer[1] = 250;mag_sens_auto_enable = 0;}//25;
-    if(agm_option_menu.sensitivity_mag == 1){I2C_TxBuffer[1] = 225;mag_sens_auto_enable = 0;}//50;
-    if(agm_option_menu.sensitivity_mag == 2){I2C_TxBuffer[1] = 200;mag_sens_auto_enable = 0;}//75;
-    if(agm_option_menu.sensitivity_mag == 3){I2C_TxBuffer[1] = 175;mag_sens_auto_enable = 0;}//100;
-    if(agm_option_menu.sensitivity_mag == 4){I2C_TxBuffer[1] = 150;mag_sens_auto_enable = 0;}//125;
-    if(agm_option_menu.sensitivity_mag == 5){I2C_TxBuffer[1] = 125;mag_sens_auto_enable = 0;}//150;
-    if(agm_option_menu.sensitivity_mag == 6){I2C_TxBuffer[1] = 100;mag_sens_auto_enable = 0;}//175;
-    if(agm_option_menu.sensitivity_mag == 7){I2C_TxBuffer[1] = 75;mag_sens_auto_enable = 0;}//200;
-    if(agm_option_menu.sensitivity_mag == 8){I2C_TxBuffer[1] = 50;mag_sens_auto_enable = 0;}//225;
-    if(agm_option_menu.sensitivity_mag == 9){I2C_TxBuffer[1] = 25;mag_sens_auto_enable = 0;}//250;
-    if(agm_option_menu.sensitivity_mag == 10)mag_sens_auto_enable = 1;//autogain  AFE_gain_auto();
+    if(agm_option_menu.sensitivity_mag == 0){I2C_TxBuffer[1] = 17;mag_sens_auto_enable = 0;fram_write_settings((uint16_t)(agm_option_menu.sensitivity_mag), 12);}//25;
+    if(agm_option_menu.sensitivity_mag == 1){I2C_TxBuffer[1] = 13;mag_sens_auto_enable = 0;fram_write_settings((uint16_t)(agm_option_menu.sensitivity_mag), 12);}//50;
+    if(agm_option_menu.sensitivity_mag == 2){I2C_TxBuffer[1] = 10;mag_sens_auto_enable = 0;fram_write_settings((uint16_t)(agm_option_menu.sensitivity_mag), 12);}//75;
+    if(agm_option_menu.sensitivity_mag == 3){I2C_TxBuffer[1] = 9;mag_sens_auto_enable = 0;fram_write_settings((uint16_t)(agm_option_menu.sensitivity_mag), 12);}//100;
+    if(agm_option_menu.sensitivity_mag == 4){I2C_TxBuffer[1] = 8;mag_sens_auto_enable = 0;fram_write_settings((uint16_t)(agm_option_menu.sensitivity_mag), 12);}//125;
+    if(agm_option_menu.sensitivity_mag == 5){I2C_TxBuffer[1] = 7;mag_sens_auto_enable = 0;fram_write_settings((uint16_t)(agm_option_menu.sensitivity_mag), 12);}//150;
+    if(agm_option_menu.sensitivity_mag == 6){I2C_TxBuffer[1] = 6;mag_sens_auto_enable = 0;fram_write_settings((uint16_t)(agm_option_menu.sensitivity_mag), 12);}//175;
+    if(agm_option_menu.sensitivity_mag == 7){I2C_TxBuffer[1] = 5;mag_sens_auto_enable = 0;fram_write_settings((uint16_t)(agm_option_menu.sensitivity_mag), 12);}//200;
+    if(agm_option_menu.sensitivity_mag == 8){I2C_TxBuffer[1] = 4;mag_sens_auto_enable = 0;fram_write_settings((uint16_t)(agm_option_menu.sensitivity_mag), 12);}//225;
+    if(agm_option_menu.sensitivity_mag == 9){I2C_TxBuffer[1] = 3;mag_sens_auto_enable = 0;fram_write_settings((uint16_t)(agm_option_menu.sensitivity_mag), 12);}//250;
+    if(agm_option_menu.sensitivity_mag == 10){mag_sens_auto_enable = 1;fram_write_settings((uint16_t)(agm_option_menu.sensitivity_mag), 12);}//autogain  AFE_gain_auto();
     if(mag_sens_auto_enable == 0){
       I2C_TxBuffer[0] = 0x10;
       I2C_WriteBuffer(hi2c1, 0x58, 2);  
@@ -1148,18 +1220,50 @@ void SystemClock_Config(void)
 
   /**Initializes the CPU, AHB and APB busses clocks 
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE|RCC_OSCILLATORTYPE_LSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
+  
+  
+    // Enable Power clock
+    //__HAL_RCC_PWR_CLK_ENABLE();
+ 
+    
+    
+    // Enable access to Backup domain
+    //HAL_PWR_EnableBkUpAccess();
+ 
+    
+    
+    // Reset Backup domain
+    //__HAL_RCC_BACKUPRESET_FORCE();
+    //__HAL_RCC_BACKUPRESET_RELEASE();  
+if ((RTC->ISR & RTC_ISR_INITS) ==  RTC_ISR_INITS)
+{
+/* Allow access to RTC */
+HAL_PWR_EnableBkUpAccess();
+/* RTC Clock selection can be changed only if the Backup Domain is reset */
+__HAL_RCC_BACKUPRESET_FORCE();
+__HAL_RCC_BACKUPRESET_RELEASE(); 
+
+}
+
+
+ 
+  
+  
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI|RCC_OSCILLATORTYPE_LSE;
+  //RCC_OscInitStruct.HSEState = RCC_HSE_OFF;//HSE_BYPASS
   RCC_OscInitStruct.LSEState = RCC_LSE_BYPASS;
+  RCC_OscInitStruct.MSIState = RCC_MSI_ON;
+  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_11;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 1;
-  RCC_OscInitStruct.PLL.PLLN = 24;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
+  RCC_OscInitStruct.PLL.PLLM = 6;
+  RCC_OscInitStruct.PLL.PLLN = 40;//24
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
   RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV6;
   RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
+    rtc_lse_error = 1;
     Error_Handler();
   }
   /**Initializes the CPU, AHB and APB busses clocks 
@@ -1180,12 +1284,12 @@ void SystemClock_Config(void)
                               |RCC_PERIPHCLK_ADC;
   PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
   PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_PCLK1;
-  PeriphClkInit.AdcClockSelection = RCC_ADCCLKSOURCE_PLLSAI1;
+  PeriphClkInit.AdcClockSelection = RCC_ADCCLKSOURCE_SYSCLK;
   PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
   PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLLSAI1;
-  PeriphClkInit.PLLSAI1.PLLSAI1Source = RCC_PLLSOURCE_HSE;
+  PeriphClkInit.PLLSAI1.PLLSAI1Source = RCC_PLLSOURCE_MSI;
   PeriphClkInit.PLLSAI1.PLLSAI1M = 1;
-  PeriphClkInit.PLLSAI1.PLLSAI1N = 8;
+  PeriphClkInit.PLLSAI1.PLLSAI1N = 12;//8
   PeriphClkInit.PLLSAI1.PLLSAI1P = RCC_PLLP_DIV7;
   PeriphClkInit.PLLSAI1.PLLSAI1Q = RCC_PLLQ_DIV2;
   PeriphClkInit.PLLSAI1.PLLSAI1R = RCC_PLLR_DIV2;
@@ -1223,7 +1327,7 @@ static void MX_ADC1_Init(void)
   /**Common config 
   */
   hadc1.Instance = ADC1;
-  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV4;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
@@ -1377,7 +1481,7 @@ static void MX_RTC_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN RTC_Init 2 */
-
+  HAL_RTCEx_EnableBypassShadow(&hrtc);
   /* USER CODE END RTC_Init 2 */
 
 }
@@ -1672,3 +1776,68 @@ void assert_failed(char *file, uint32_t line)
   */
   
 //LL_TIM_EnableCounter(TIM7);
+
+
+    /*
+    //usb section
+    if(((UserRxBufferFS[0] == 0x7f) && (UserRxBufferFS[1] == 0xaa))||(usb_sending_data == 1)){
+     
+      if(UserRxBufferFS[3] == 0x01){//opCode for sending records data
+        //temp_recordCnt = fram_read_settings(6);
+        temp_recordCnt = fram_read_settings(7);
+        //if(temp_recordCnt >= 1024)temp_recordCnt = 1024;
+        fram_read_buf(temp_dataRecord, 64, 0);
+        UserTxBufferFS[0] = (uint8_t)(temp_recordCnt>>24);
+        UserTxBufferFS[1] = (uint8_t)(temp_recordCnt>>16);
+        UserTxBufferFS[2] = (uint8_t)(temp_recordCnt>>8);
+        UserTxBufferFS[3] = (uint8_t)(temp_recordCnt&0xff);
+        //UserTxBufferFS[4] = 0xaa;
+        //UserTxBufferFS[5] = 0x55;
+        //UserTxBufferFS[6] = 0x01;
+        //UserTxBufferFS[7] = 0x02;
+        for(uint8_t usb_i = 0; usb_i < 28; usb_i++){
+          UserTxBufferFS[2*usb_i+4] = (uint8_t)(temp_dataRecord[usb_i]>>8);
+          UserTxBufferFS[2*usb_i+5] = (uint8_t)(temp_dataRecord[usb_i]&0xff);
+          
+        }
+        
+        for(uint32_t i_usb = 0; i_usb<(2*temp_recordCnt);i_usb++){
+          UserTxBufferFS[2*i_usb+4] = (uint8_t)(temp_dataRecord[i_usb]>>8);
+          UserTxBufferFS[2*i_usb+5] = (uint8_t)(temp_dataRecord[i_usb]&0xff);
+        }
+        
+        
+        //USBD_CDC_SetTxBuffer(&hUsbDeviceFS, &UserTxBufferFS[0], 64);
+        //USBD_CDC_TransmitPacket(&hUsbDeviceFS);        
+        CDC_Transmit_FS(UserTxBufferFS, 64);
+        //CDC_Transmit_FS(UserTxBufferFS, 64);
+     
+      }//opcode 0x01
+      if(UserRxBufferFS[3] == 0x02){
+        agm.serial_number = (UserRxBufferFS[4]<<8)|(UserRxBufferFS[5]);
+        fram_write_settings(agm.serial_number, 10);
+        
+        //CDC_Transmit_FS(UserTxBufferFS, 2048);
+      }
+      if(UserRxBufferFS[3] == 0x03){
+        //agm.serial_number = (UserRxBufferFS[4]<<8)|(UserRxBufferFS[5]);
+        //fram_write_settings(agm.serial_number, 10);
+        fram_erase_event = 1;
+        //CDC_Transmit_FS(UserTxBufferFS, 2048);
+      }
+      if(UserRxBufferFS[3] == 0x04){
+        notch_filter_event = 1; 
+        if(UserRxBufferFS[4] == 0x00)agm_option_menu.notch_filter = 0;//50Hz
+        if(UserRxBufferFS[4] == 0x01)agm_option_menu.notch_filter = 1;//60Hz
+        //CDC_Transmit_FS(UserTxBufferFS, 2048);
+      }  
+      if(UserRxBufferFS[3] == 0x05){//utc timezone
+
+        //CDC_Transmit_FS(UserTxBufferFS, 2048);
+      }       
+      
+      //clear start byte to prevent double proc
+      UserRxBufferFS[0] = 0x00;
+
+    }//usb receive cmd
+    */

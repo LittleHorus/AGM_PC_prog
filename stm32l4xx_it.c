@@ -116,6 +116,10 @@ extern char atCmdGLL[23];
 uint16_t icon_blink_cnt = 0;
 uint8_t icon_blink_state = 0;
 
+extern uint8_t notch_filter_configure, adc_m_cnt;   
+extern uint16_t adc_m[25];
+extern uint16_t record_start_delay_cnt; 
+extern uint8_t record_start_delay_done;
 
 extern uint8_t gps_latch_done;
 extern uint32_t gps_latch_timer;
@@ -381,9 +385,22 @@ void TIM7_IRQHandler(void)
     if((gnss_wait_wakeup_after_reset == 0) && (gnss_reset_pulse_enable == 2))gnssPowRdy = 1;
     */
     if(gps_latch_timer != 0)gps_latch_timer--;
-    if((gps_latch_timer ==0) && (gps_latch_done == 1)){
+    
+    if((gps_latch_timer ==1180000) && (gps_latch_done == 0)){
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
+      //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
+    }
+    
+    if((gps_latch_timer ==5000) && (gps_latch_done == 0)){
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
+      //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
+    }
+    if((gps_latch_timer ==1) && (gps_latch_done == 0)){
+      
       HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+QGNSSC=1\r\n", 13);
-      gps_latch_done = 0;
+      //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+QSCLK=0\r\n", 12);
+      //HAL_UART_Transmit_IT(&huart2, (uint8_t*)"AT+CFUN=0\r\n", 11);
+      //gps_latch_done = 0;
     }
     if(gnss_startup_delay != 0)gnss_startup_delay--;
     if(time_update_cnt != 0)time_update_cnt--;
@@ -403,16 +420,26 @@ void TIM7_IRQHandler(void)
     if(error_led_state == 0){
       error_led_cnt = 0;
     }
-    
-      
+    if(record_start_delay_cnt == 1)record_start_delay_done = 1;
+    if(record_start_delay_cnt != 0)record_start_delay_cnt--;
     //100ms - 10Hz sample rate for mag detector
     if(ADC1->ISR & ADC_ISR_EOC){
         
       if(adc_order == 0){
         adc_ch1 = ADC1->DR;
         gain_update = 1;
+        
+        if(notch_filter_configure == 1){
+          adc_m[adc_m_cnt++] = adc_ch1;
+          if(adc_m_cnt == 20){ adc_m_cnt = 0;
+            notch_filter_configure = 0;
+          }
+        }
+
         if((adc_ready == 1)&&(adc_fetch_timeout == 0)&&(agm_standby_active_mode == 0x01)){
-          threshold_buffer(adc_ch1, 100);
+          if(record_start_delay_done == 1){
+            threshold_buffer(adc_ch1, 100);
+          }
           adc_fetch_timeout = 50;//5ms
         }
         adc_ready = 1;
@@ -485,7 +512,7 @@ void TIM7_IRQHandler(void)
         
         if(main_menu_string_state == 0){
           
-          if(display_refresh_timer >= 10000){//update every 6sec
+          if(display_refresh_timer >= 10000){//update every 1sec
             display_refresh_timer = 0;
             oled_status_pict(icon_blink_state);// 3 and 4 rows
             char date_sting[23] = "001 00:00:00 00/00/00";
@@ -497,79 +524,37 @@ void TIM7_IRQHandler(void)
             date_sting[1] = (uint8_t)(0x30+(agm.serial_number/100)%10);
             date_sting[2] = (uint8_t) (0x30+agm.serial_number%10);
             
-            if(sTime.Hours < 10) {
-              date_sting[4] = (uint8_t)'0';
-              date_sting[5] = (uint8_t)(0x30 + sTime.Hours);
-              data_string_1[4] = (uint8_t)'0';
-              data_string_1[5] = (uint8_t)(0x30 + recordTime.Hours);            
-            }
-            else{
               date_sting[4] = (uint8_t)0x30u + (sTime.Hours/10);
               date_sting[5] = (uint8_t)0x30u + (sTime.Hours%10);  
               data_string_1[4] = (uint8_t)0x30u + (recordTime.Hours/10);
-              data_string_1[5] = (uint8_t)0x30u + (recordTime.Hours%10);              
-            }
-            if(sTime.Minutes < 10){
-              date_sting[7] = (uint8_t)'0';
-              date_sting[8] = (uint8_t)(0x30 + sTime.Minutes);
-              data_string_1[7] = (uint8_t)'0';
-              data_string_1[8] = (uint8_t)(0x30 + recordTime.Minutes);            
-            }
-            else{
+              data_string_1[5] = (uint8_t)0x30u + (recordTime.Hours%10);
+              
               date_sting[7] = (uint8_t)0x30u + (sTime.Minutes/10);
               date_sting[8] = (uint8_t)0x30u + (sTime.Minutes%10);
               data_string_1[7] = (uint8_t)0x30u + (recordTime.Minutes/10);
-              data_string_1[8] = (uint8_t)0x30u + (recordTime.Minutes%10);            
-            }
-            if(sTime.Seconds < 10){
-              date_sting[10] = (uint8_t)'0';
-              date_sting[11] = (uint8_t)(0x30 + sTime.Seconds);
-              data_string_1[10] = (uint8_t)(0x30 + recordTime.Seconds/10);
-              data_string_1[11] = (uint8_t)(0x30 + recordTime.Seconds%10);            
-            }
-            else{
+              data_string_1[8] = (uint8_t)0x30u + (recordTime.Minutes%10);   
+
+              
               date_sting[10] = (uint8_t)0x30u + (sTime.Seconds/10);
               date_sting[11] = (uint8_t)0x30u + (sTime.Seconds%10); 
               data_string_1[10] = (uint8_t)0x30u + (recordTime.Seconds/10);
-              data_string_1[11] = (uint8_t)0x30u + (recordTime.Seconds%10);               
-            }          
-            if(DateToUpdate.Date < 10){
-              date_sting[13] = (uint8_t)'0';
-              date_sting[14] = (uint8_t)(0x30 + DateToUpdate.Date);
-              data_string_1[13] = (uint8_t)'0';
-              data_string_1[14] = (uint8_t)(0x30 + recordDate.Date);            
-            }
-            else{
+              data_string_1[11] = (uint8_t)0x30u + (recordTime.Seconds%10);  
+
               date_sting[13] = (uint8_t)0x30u + (DateToUpdate.Date/10);
               date_sting[14] = (uint8_t)0x30u + (DateToUpdate.Date%10);
               data_string_1[13] = (uint8_t)0x30u + (recordDate.Date/10);
-              data_string_1[14] = (uint8_t)0x30u + (recordDate.Date%10);              
-            }   
-            if(DateToUpdate.Month < 10){
-              date_sting[16] = (uint8_t)'0';
-              date_sting[17] = (uint8_t)(0x30 + DateToUpdate.Month);
-              data_string_1[16] = (uint8_t)'0';
-              data_string_1[17] = (uint8_t)(0x30 + recordDate.Month);            
-            }
-            else{
+              data_string_1[14] = (uint8_t)0x30u + (recordDate.Date%10); 
+
               date_sting[16] = (uint8_t)0x30u + (DateToUpdate.Month/10);
               date_sting[17] = (uint8_t)0x30u + (DateToUpdate.Month%10);
               data_string_1[16] = (uint8_t)0x30u + (recordDate.Month/10);
-              data_string_1[17] = (uint8_t)0x30u + (recordDate.Month%10);              
-            }   
-            if(DateToUpdate.Year < 10){
-              date_sting[19] = (uint8_t)'0';
-              date_sting[20] = (uint8_t)(0x30 + DateToUpdate.Year);
-              data_string_1[19] = (uint8_t)'0';
-              data_string_1[20] = (uint8_t)(0x30 + recordDate.Year);            
-            }
-            else{
+              data_string_1[17] = (uint8_t)0x30u + (recordDate.Month%10);  
+
               date_sting[19] = (uint8_t)0x30u + (DateToUpdate.Year/10);
               date_sting[20] = (uint8_t)0x30u + (DateToUpdate.Year%10); 
               data_string_1[19] = (uint8_t)0x30u + (recordDate.Year/10);
-              data_string_1[20] = (uint8_t)0x30u + (recordDate.Year%10);             
-            }   
-       
+              data_string_1[20] = (uint8_t)0x30u + (recordDate.Year%10);               
+
             oled_clear_string(0);
             //oled_text(date_sting, 0);
             oled_text_custom(date_sting, 0, 3);
@@ -582,7 +567,7 @@ void TIM7_IRQHandler(void)
           }
         }//main_menu_string_state = 0 time
         if(main_menu_string_state == 1){  
-          if(display_refresh_timer >= 30000){
+          if(display_refresh_timer >= 10000){
             display_refresh_timer = 0;
             oled_status_pict(icon_blink_state);// 3 and 4 rows
             char date_string_0[23] = "001 00.000N  000.000W";
@@ -663,8 +648,8 @@ void TIM7_IRQHandler(void)
             
             data_string_1[14] = (uint8_t)0x30+((card_watcher*100)/262144)/10;
             data_string_1[15] = (uint8_t)0x30+((card_watcher*100)/262144)%10;
-            //data_string_1[17] = (uint8_t)0x30+((card_watcher*1000)/262144)%10;
-            //data_string_1[18] = (uint8_t)0x30+((card_watcher*10000)/262144)%10;
+            data_string_1[17] = (uint8_t)0x30+((card_watcher*1000)/262144)/10;
+            data_string_1[18] = (uint8_t)0x30+((card_watcher*10000)/262144)%10;
             oled_clear_string(0);
             //oled_text(gps_oled_string, 1);
             //oled_text_inv(date_string_0, 0);
@@ -682,7 +667,7 @@ void TIM7_IRQHandler(void)
       blink_active_param++;
       if(blink_active_param >= 10000) blink_active_param = 0;
       
-      _agm_sleep_timer++;
+      if(_agm_sleep_timer<AGM_SLEEP_TIME)_agm_sleep_timer++;
       if(_agm_sleep_timer >= AGM_SLEEP_TIME)sleep_mode_state = 1;// { menu_level = STANDBY_MENU;LCD_WriteCommand(0x0f);}
       
 
@@ -770,13 +755,14 @@ void TIM7_IRQHandler(void)
     }//logo_delay
     
     led_toggle++;
-    if(led_toggle == 5000){
-      HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);    
-     
+    if(led_toggle == 9500){
+      //HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);    
+      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
       
     }
     if(led_toggle >= 10000){
-      HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+      //HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
       led_toggle = 0;
     }
       
