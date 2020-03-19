@@ -155,7 +155,8 @@ struct gps_status_struct{
   
 }extern agm_gps_status;
 
-
+extern uint32_t record_length_enough_cnt;
+extern uint8_t record_length_enough;
 
 /* USER CODE END PV */
 
@@ -373,7 +374,10 @@ void TIM7_IRQHandler(void)
   if(LL_TIM_IsActiveFlag_UPDATE(TIM7) == 1){
     
     if(gps_update_data_timer != 0)gps_update_data_timer--;
-       
+    
+    if(record_length_enough_cnt != 0)record_length_enough_cnt--;
+    if(record_length_enough_cnt == 1)record_length_enough = 1;
+    
     /*
     if(gnss_startup_delay != 0)gnss_startup_delay--;
     if((gnss_reset_pulse_enable == 1) && (gnss_startup_delay == 0)){
@@ -471,7 +475,10 @@ void TIM7_IRQHandler(void)
     
     
     icon_blink_cnt++;
-    if(icon_blink_cnt >=1000){icon_blink_state = (icon_blink_state^1)&1;icon_blink_cnt = 0;}
+    if(icon_blink_cnt >=10000){
+      icon_blink_state = (icon_blink_state^1)&1;
+      icon_blink_cnt = 0;
+    }
     
     if(logo_delay != 0) logo_delay--;
     else agm_logo_lock = 0;
@@ -793,7 +800,9 @@ void TIM7_IRQHandler(void)
       HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
       
     }
+    
     LL_TIM_ClearFlag_UPDATE(TIM7);
+    
     
   }
   

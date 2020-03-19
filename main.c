@@ -104,6 +104,7 @@ uint16_t adc_m[25];
 
 uint16_t record_start_delay_cnt = 0; 
 uint8_t record_start_delay_done = 0;
+uint32_t temp_fram_address_cnt = 0;
 
 uint8_t at_wakeup_try = 3;
 uint8_t gps_latch_done = 0, gps_latch_cnt = 0;
@@ -128,6 +129,8 @@ char gll_received = 1;
 uint32_t gps_update_data_timer = 0;
 uint16_t time_update_cnt = 10000;
 uint8_t error_led_state = 0;
+uint32_t record_length_enough_cnt = 0;
+uint8_t record_length_enough = 0;
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -342,6 +345,9 @@ void threshold_buffer(uint16_t data_input, uint16_t threshold){
              recordDate.Year = DateToUpdate.Year;
              agm.event = EVENT;
              if(record_start == 1){
+               record_length_enough_cnt = 30001;
+               record_length_enough = 0;
+               temp_fram_address_cnt = _fram_address_cnt;
                buzzer_alarm = 1;
                record_number++;
                recordHeader[0] = 0x0000;
@@ -401,7 +407,15 @@ void threshold_buffer(uint16_t data_input, uint16_t threshold){
               }              
               fram_write_settings((uint16_t)(_fram_address_cnt>>16), 6);
               fram_write_settings((uint16_t)(_fram_address_cnt&0xffff), 7);
-              fram_write_settings(record_number, 8); 
+              fram_write_settings(record_number, 8);
+              if((record_length_enough == 0)&&(record_length_enough_cnt != 0)){
+                record_number -= 1;
+                record_length_enough_cnt = 0;
+                fram_write_settings(record_number, 8);
+                _fram_address_cnt = temp_fram_address_cnt;
+                fram_write_settings((uint16_t)(_fram_address_cnt>>16), 6);
+                fram_write_settings((uint16_t)(_fram_address_cnt&0xffff), 7);                
+              }
             }
              //need shift tail for except colisions
              temp_tail_sleep++;
@@ -419,7 +433,7 @@ void timer_init(){
   TIM_InitStructure.Autoreload = 99;
   TIM_InitStructure.ClockDivision = LL_TIM_CLOCKDIVISION_DIV1;
   TIM_InitStructure.CounterMode = LL_TIM_COUNTERMODE_UP;
-  TIM_InitStructure.Prescaler = 79;//71  1MHz clk
+  TIM_InitStructure.Prescaler = 47;//71  1MHz clk
   //TIM_InitStructure.RepetitionCounter = 0x00;
   LL_TIM_Init(TIM7, &TIM_InitStructure);
  
@@ -442,7 +456,7 @@ void I2C_SetNotchFreq(I2C_HandleTypeDef hi, uint8_t DEV_ADDR, uint8_t sizebuf){
 }
 /******************************************************************************/
 void I2C_ReadBuffer(I2C_HandleTypeDef hi, uint8_t DEV_ADDR, uint8_t sizebuf){
-  while(HAL_I2C_Master_Receive(&hi, (uint16_t)DEV_ADDR, (uint8_t*) &I2C_TxBuffer, (uint16_t)sizebuf, (uint32_t)1000)!= HAL_OK);
+  while(HAL_I2C_Master_Receive(&hi, (uint16_t)DEV_ADDR, (uint8_t*) &I2C_TxBuffer, (uint16_t)sizebuf, (uint32_t)1000)!= HAL_OK)if (HAL_I2C_GetError(&hi) == HAL_I2C_ERROR_AF)break;
 }
 /******************************************************************************/
 void I2C_WriteBuffer(I2C_HandleTypeDef hi, uint8_t DEV_ADDR, uint8_t sizebuf){
@@ -647,9 +661,7 @@ int main(void)
   agm.signal = SIGNAL_MAG;
   agm.state = STATE_STANDBY;
   
-  
-  
-  
+
   agm_option_menu.record_mode = 0;
   agm_option_menu.sensitivity_mag = 1;
   agm_option_menu.sensitivity_lf = 10;
@@ -711,7 +723,7 @@ int main(void)
   if(agm_option_menu.record_mode == 0xff) agm_option_menu.record_mode = 0;
   */
   
-    
+  //HAL_Delay(200);  
   //AFE_gain_auto();
   uint32_t usb_delay = 0;
   
@@ -957,6 +969,8 @@ int main(void)
         agm_standby_active_mode = MODE_ACTIVE;
         record_start_delay_cnt = 30001;//3sec
         agm.state = STATE_ACTIVE;
+        _agm_sleep_timer = 170000;
+        
       }
       else{
         record_start_delay_done = 0;
@@ -1204,7 +1218,9 @@ int main(void)
     }
     sensitivity_mag_event = 0;
   }
-
+  //HAL_SuspendTick();
+  //HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+  //HAL_ResumeTick();
     }//while(1)
 }//main
 /******************************************************************************/
@@ -1235,32 +1251,33 @@ void SystemClock_Config(void)
     // Reset Backup domain
     //__HAL_RCC_BACKUPRESET_FORCE();
     //__HAL_RCC_BACKUPRESET_RELEASE();  
+  
+/*  
 if ((RTC->ISR & RTC_ISR_INITS) ==  RTC_ISR_INITS)
 {
-/* Allow access to RTC */
+
 HAL_PWR_EnableBkUpAccess();
-/* RTC Clock selection can be changed only if the Backup Domain is reset */
 __HAL_RCC_BACKUPRESET_FORCE();
 __HAL_RCC_BACKUPRESET_RELEASE(); 
-
 }
-
+*/
 
  
   
   
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI|RCC_OSCILLATORTYPE_LSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI|RCC_OSCILLATORTYPE_LSE;//|RCC_OSCILLATORTYPE_HSI;
   //RCC_OscInitStruct.HSEState = RCC_HSE_OFF;//HSE_BYPASS
   RCC_OscInitStruct.LSEState = RCC_LSE_BYPASS;
+  //RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.MSIState = RCC_MSI_ON;
   RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_11;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
-  RCC_OscInitStruct.PLL.PLLM = 6;
-  RCC_OscInitStruct.PLL.PLLN = 40;//24
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
-  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV6;
-  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV4;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_NONE;
+  //RCC_OscInitStruct.PLL.PLLM = 6;
+  //RCC_OscInitStruct.PLL.PLLN = 40;//24
+  //RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
+  //RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV6;
+  //RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     rtc_lse_error = 1;
@@ -1270,7 +1287,7 @@ __HAL_RCC_BACKUPRESET_RELEASE();
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_MSI;//RCC_SYSCLKSOURCE_MSI//RCC_SYSCLKSOURCE_PLLCLK
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
@@ -1282,18 +1299,18 @@ __HAL_RCC_BACKUPRESET_RELEASE();
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_RTC|RCC_PERIPHCLK_USART2
                               |RCC_PERIPHCLK_I2C1|RCC_PERIPHCLK_USB
                               |RCC_PERIPHCLK_ADC;
-  PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
-  PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_PCLK1;
+  PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_SYSCLK;
+  PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_SYSCLK;
   PeriphClkInit.AdcClockSelection = RCC_ADCCLKSOURCE_SYSCLK;
   PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
-  PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLLSAI1;
-  PeriphClkInit.PLLSAI1.PLLSAI1Source = RCC_PLLSOURCE_MSI;
-  PeriphClkInit.PLLSAI1.PLLSAI1M = 1;
-  PeriphClkInit.PLLSAI1.PLLSAI1N = 12;//8
-  PeriphClkInit.PLLSAI1.PLLSAI1P = RCC_PLLP_DIV7;
-  PeriphClkInit.PLLSAI1.PLLSAI1Q = RCC_PLLQ_DIV2;
-  PeriphClkInit.PLLSAI1.PLLSAI1R = RCC_PLLR_DIV2;
-  PeriphClkInit.PLLSAI1.PLLSAI1ClockOut = RCC_PLLSAI1_48M2CLK|RCC_PLLSAI1_ADC1CLK;
+  PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_MSI;
+  //PeriphClkInit.PLLSAI1.PLLSAI1Source = RCC_PLLSOURCE_MSI;
+  //PeriphClkInit.PLLSAI1.PLLSAI1M = 1;
+  //PeriphClkInit.PLLSAI1.PLLSAI1N = 12;//8
+  //PeriphClkInit.PLLSAI1.PLLSAI1P = RCC_PLLP_DIV7;
+  //PeriphClkInit.PLLSAI1.PLLSAI1Q = RCC_PLLQ_DIV2;
+  //PeriphClkInit.PLLSAI1.PLLSAI1R = RCC_PLLR_DIV2;
+  //PeriphClkInit.PLLSAI1.PLLSAI1ClockOut = RCC_PLLSAI1_48M2CLK|RCC_PLLSAI1_ADC1CLK;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
@@ -1647,6 +1664,21 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
+  GPIO_InitStruct.Pin = GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);  
+  GPIO_InitStruct.Pin = GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);    
+  GPIO_InitStruct.Pin = GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8 | GPIO_PIN_13 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_14 | GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);    
   /*Configure GPIO pins : LED1_Pin LED2_Pin */
   GPIO_InitStruct.Pin = LED1_Pin|LED2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
