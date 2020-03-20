@@ -309,8 +309,6 @@ void threshold_buffer(uint16_t data_input, uint16_t threshold){
           }
           //Exceed threshold? yes -> send from buff, no stop writing
           
-         
-          
           if((temp_max_value - temp_min_value) > threshold){
             if(write_from_buf_cnt >= 30){
               temp_fram_write_event = 1;
@@ -1292,7 +1290,7 @@ __HAL_RCC_BACKUPRESET_RELEASE();
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
