@@ -343,7 +343,7 @@ void threshold_buffer(uint16_t data_input, uint16_t threshold){
              recordDate.Year = DateToUpdate.Year;
              agm.event = EVENT;
              if(record_start == 1){
-               record_length_enough_cnt = 30001;
+               record_length_enough_cnt = 5001;
                record_length_enough = 0;
                temp_fram_address_cnt = _fram_address_cnt;
                buzzer_alarm = 1;
@@ -606,6 +606,52 @@ void usb_tx(){
           fram_write_settings(((notch_50Hz_value<<8)|(notch_60Hz_value)), 9);
           
         }
+        if(UserRxBufferFS[3] == 0x08){
+          if(UserRxBufferFS[4] == 0x00){
+            
+          temp_recordCnt = fram_read_settings(7);
+          usb_offset = 0;
+          fram_read_buf(temp_dataRecord, 32, 0);
+          UserTxBufferFS[0] = (uint8_t)(temp_recordCnt>>24);
+          UserTxBufferFS[1] = (uint8_t)(temp_recordCnt>>16);
+          UserTxBufferFS[2] = (uint8_t)(temp_recordCnt>>8);
+          UserTxBufferFS[3] = (uint8_t)(temp_recordCnt&0xff);
+          uint16_t usbTxbufTemp[30];
+          for(uint8_t iUsb = 0; iUsb<20; iUsb++){
+            usbTxbufTemp[iUsb] = 1605; 
+          }
+          
+          //UserTxBufferFS[4] = 0xaa;
+          //UserTxBufferFS[5] = 0x55;
+          //UserTxBufferFS[6] = 0x01;
+          //UserTxBufferFS[7] = 0x02;
+          for(uint8_t usb_i = 0; usb_i < 20; usb_i++){//28
+            UserTxBufferFS[2*usb_i+4] = (uint8_t)(usbTxbufTemp[usb_i]>>8);//(uint8_t)(temp_dataRecord[usb_i]>>8);
+            UserTxBufferFS[2*usb_i+5] = (uint8_t)(usbTxbufTemp[usb_i]&0xff);//(uint8_t)temp_dataRecord[usb_i];
+            
+          }            
+           CDC_Transmit_FS(UserTxBufferFS, 64); 
+          }
+          /*
+          I2C_TxBuffer_Notch[0] = 0x10;
+          I2C_TxBuffer_Notch[1] = UserRxBufferFS[4];
+          I2C_SetNotchFreq(hi2c1, 0x5e, 2);
+          
+          notch_filter_configure = 1;
+          while(notch_filter_configure == 1);
+          UserTxBufferFS[0] = 0x00;
+          UserTxBufferFS[1] = 0x00;
+          UserTxBufferFS[2] = 0xaa;
+          UserTxBufferFS[3] = 0x5e;
+          for(uint8_t notch_i = 0; notch_i < 20; notch_i++){
+            
+            UserTxBufferFS[2*notch_i+4] = (uint8_t)(adc_m[notch_i]>>8);
+            UserTxBufferFS[2*notch_i+1+4] = (uint8_t)(adc_m[notch_i]&0xff);
+          }
+       
+          CDC_Transmit_FS(UserTxBufferFS, 64);          
+          */
+        }//usb small packed transfer
         
         
         
@@ -1691,11 +1737,18 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(DETECT_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : RES_Pin NETLIGHT_Pin BUZZER_Pin GSM_RST_Pin */
-  GPIO_InitStruct.Pin = RES_Pin|NETLIGHT_Pin|BUZZER_Pin|GSM_RST_Pin;
+  GPIO_InitStruct.Pin = RES_Pin|BUZZER_Pin|GSM_RST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  //RES_Pin NETLIGHT
+  GPIO_InitStruct.Pin = NETLIGHT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);  
+  
 
   /*Configure GPIO pins : KEY1_Pin KEY2_Pin KEY3_Pin */
   GPIO_InitStruct.Pin = KEY1_Pin|KEY2_Pin|KEY3_Pin;
