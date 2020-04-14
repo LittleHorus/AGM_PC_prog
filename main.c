@@ -212,6 +212,8 @@ extern unsigned int led_toggle;
 extern uint8_t UserRxBufferFS[64];
 extern uint8_t UserTxBufferFS[64];
 uint16_t temp_dataRecord[2048];
+uint32_t usb_block_offset = 0;
+uint16_t usb_block_buf[20];
 extern uint16_t adc_ch1, adc_ch2;
 extern uint8_t ssd1306xled_font5x7[];
 extern const uint8_t ssd1306xled_font6x8[];
@@ -241,6 +243,7 @@ static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_RTC_Init(void);
 uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len);
+uint8_t rtc_Init();
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -448,9 +451,12 @@ void timer_init(){
 }
 /******************************************************************************/
 void I2C_SetNotchFreq(I2C_HandleTypeDef hi, uint8_t DEV_ADDR, uint8_t sizebuf){
-    while(HAL_I2C_Master_Transmit(&hi, (uint16_t)DEV_ADDR,(uint8_t*) &I2C_TxBuffer_Notch, (uint16_t)sizebuf, (uint32_t)1000)!= HAL_OK){
-        if (HAL_I2C_GetError(&hi) == HAL_I2C_ERROR_AF)break;
-    }
+    //while(HAL_I2C_Master_Transmit(&hi, (uint16_t)DEV_ADDR,(uint8_t*) &I2C_TxBuffer_Notch, (uint16_t)sizebuf, (uint32_t)1000)!= HAL_OK){
+    //    if (HAL_I2C_GetError(&hi) == HAL_I2C_ERROR_AF)break;
+        
+        
+    //}
+    HAL_I2C_Master_Transmit(&hi, (uint16_t)DEV_ADDR,(uint8_t*) &I2C_TxBuffer_Notch, (uint16_t)sizebuf, (uint32_t)1000);
 }
 /******************************************************************************/
 void I2C_ReadBuffer(I2C_HandleTypeDef hi, uint8_t DEV_ADDR, uint8_t sizebuf){
@@ -458,9 +464,10 @@ void I2C_ReadBuffer(I2C_HandleTypeDef hi, uint8_t DEV_ADDR, uint8_t sizebuf){
 }
 /******************************************************************************/
 void I2C_WriteBuffer(I2C_HandleTypeDef hi, uint8_t DEV_ADDR, uint8_t sizebuf){
-    while(HAL_I2C_Master_Transmit(&hi, (uint16_t)DEV_ADDR,(uint8_t*) &I2C_TxBuffer, (uint16_t)sizebuf, (uint32_t)1000)!= HAL_OK){
-        if (HAL_I2C_GetError(&hi) == HAL_I2C_ERROR_AF)break;
-    }
+    //while(HAL_I2C_Master_Transmit(&hi, (uint16_t)DEV_ADDR,(uint8_t*) &I2C_TxBuffer, (uint16_t)sizebuf, (uint32_t)1000)!= HAL_OK){
+    //    if (HAL_I2C_GetError(&hi) == HAL_I2C_ERROR_AF)break;
+    //}
+    HAL_I2C_Master_Transmit(&hi, (uint16_t)DEV_ADDR,(uint8_t*) &I2C_TxBuffer, (uint16_t)sizebuf, (uint32_t)1000);
 }
 /******************************************************************************/
 void AFE_gain_auto(){
@@ -539,10 +546,7 @@ void usb_tx(){
           UserTxBufferFS[1] = (uint8_t)(temp_recordCnt>>16);
           UserTxBufferFS[2] = (uint8_t)(temp_recordCnt>>8);
           UserTxBufferFS[3] = (uint8_t)(temp_recordCnt&0xff);
-          //UserTxBufferFS[4] = 0xaa;
-          //UserTxBufferFS[5] = 0x55;
-          //UserTxBufferFS[6] = 0x01;
-          //UserTxBufferFS[7] = 0x02;
+
           for(uint8_t usb_i = 0; usb_i < 30; usb_i++){//28
             UserTxBufferFS[2*usb_i+4] = (uint8_t)(temp_dataRecord[usb_i]>>8);
             UserTxBufferFS[2*usb_i+5] = (uint8_t)temp_dataRecord[usb_i];
@@ -609,50 +613,61 @@ void usb_tx(){
         if(UserRxBufferFS[3] == 0x08){
           if(UserRxBufferFS[4] == 0x00){
             
-          temp_recordCnt = fram_read_settings(7);
-          usb_offset = 0;
-          fram_read_buf(temp_dataRecord, 32, 0);
-          UserTxBufferFS[0] = (uint8_t)(temp_recordCnt>>24);
-          UserTxBufferFS[1] = (uint8_t)(temp_recordCnt>>16);
-          UserTxBufferFS[2] = (uint8_t)(temp_recordCnt>>8);
-          UserTxBufferFS[3] = (uint8_t)(temp_recordCnt&0xff);
-          uint16_t usbTxbufTemp[30];
-          for(uint8_t iUsb = 0; iUsb<20; iUsb++){
-            usbTxbufTemp[iUsb] = 1605; 
-          }
-          
-          //UserTxBufferFS[4] = 0xaa;
-          //UserTxBufferFS[5] = 0x55;
-          //UserTxBufferFS[6] = 0x01;
-          //UserTxBufferFS[7] = 0x02;
-          for(uint8_t usb_i = 0; usb_i < 20; usb_i++){//28
-            UserTxBufferFS[2*usb_i+4] = (uint8_t)(usbTxbufTemp[usb_i]>>8);//(uint8_t)(temp_dataRecord[usb_i]>>8);
-            UserTxBufferFS[2*usb_i+5] = (uint8_t)(usbTxbufTemp[usb_i]&0xff);//(uint8_t)temp_dataRecord[usb_i];
+            temp_recordCnt = (fram_read_settings(6)<<16) | fram_read_settings(7);
+            usb_offset = 0;
+            usb_block_offset = 0;
             
-          }            
-           CDC_Transmit_FS(UserTxBufferFS, 64); 
+            //fram_read_buf(temp_dataRecord, 32, 0);
+            UserTxBufferFS[0] = (uint8_t)(temp_recordCnt>>24);
+            UserTxBufferFS[1] = (uint8_t)(temp_recordCnt>>16);
+            UserTxBufferFS[2] = (uint8_t)(temp_recordCnt>>8);
+            UserTxBufferFS[3] = (uint8_t)(temp_recordCnt&0xff);
+            UserTxBufferFS[4] = 0xf0;
+            UserTxBufferFS[5] = 0xfe;            
+            UserTxBufferFS[6] = (uint8_t)(temp_recordCnt>>24);
+            UserTxBufferFS[7] = (uint8_t)(temp_recordCnt>>16);
+            UserTxBufferFS[8] = (uint8_t)(temp_recordCnt>>8);
+            UserTxBufferFS[9] = (uint8_t)(temp_recordCnt&0xff);
+           
+            CDC_Transmit_FS(UserTxBufferFS, 64); 
           }
-          /*
-          I2C_TxBuffer_Notch[0] = 0x10;
-          I2C_TxBuffer_Notch[1] = UserRxBufferFS[4];
-          I2C_SetNotchFreq(hi2c1, 0x5e, 2);
-          
-          notch_filter_configure = 1;
-          while(notch_filter_configure == 1);
-          UserTxBufferFS[0] = 0x00;
-          UserTxBufferFS[1] = 0x00;
-          UserTxBufferFS[2] = 0xaa;
-          UserTxBufferFS[3] = 0x5e;
-          for(uint8_t notch_i = 0; notch_i < 20; notch_i++){
+          if(UserRxBufferFS[4] == 0x01){
+            usb_block_offset += 20;
+            fram_read_buf(usb_block_buf, 20, usb_block_offset);
             
-            UserTxBufferFS[2*notch_i+4] = (uint8_t)(adc_m[notch_i]>>8);
-            UserTxBufferFS[2*notch_i+1+4] = (uint8_t)(adc_m[notch_i]&0xff);
+            UserTxBufferFS[0] = (uint8_t)(usb_block_offset>>24);
+            UserTxBufferFS[1] = (uint8_t)(usb_block_offset>>16);
+            UserTxBufferFS[2] = (uint8_t)(usb_block_offset>>8);
+            UserTxBufferFS[3] = (uint8_t)(usb_block_offset&0xff);
+            UserTxBufferFS[4] = 0xf1;
+            UserTxBufferFS[5] = 0xfe;
+            
+            usb_block_offset += 20;
+            fram_read_buf(usb_block_buf, 20, usb_block_offset);
+            for(uint8_t usb_i = 0; usb_i < 20; usb_i++){
+              UserTxBufferFS[2*usb_i+6] = (uint8_t)(usb_block_buf[usb_i]>>8);
+              UserTxBufferFS[2*usb_i+7] = (uint8_t)(usb_block_buf[usb_i]&0xff);
+            }
+ /*           
+            uint16_t usbTxbufTemp[30];
+            for(uint8_t iUsb = 0; iUsb<20; iUsb++){
+              usbTxbufTemp[iUsb] = 2712; 
+            }            
+            for(uint8_t usb_i = 0; usb_i < 20; usb_i++){//28
+              UserTxBufferFS[2*usb_i+6] = (uint8_t)(usbTxbufTemp[usb_i]>>8);//(uint8_t)(temp_dataRecord[usb_i]>>8);
+              UserTxBufferFS[2*usb_i+7] = (uint8_t)(usbTxbufTemp[usb_i]&0xff);//(uint8_t)temp_dataRecord[usb_i];
+              
+            } 
+*/            
+            CDC_Transmit_FS(UserTxBufferFS, 64); 
           }
-       
-          CDC_Transmit_FS(UserTxBufferFS, 64);          
-          */
+
         }//usb small packed transfer
-        
+        if(UserRxBufferFS[3] == 0x09){
+
+          
+          //CDC_Transmit_FS(UserTxBufferFS, 2048);
+        }        
         
         
         //clear start byte to prevent double proc
@@ -671,9 +686,11 @@ int main(void)
   MX_GPIO_Init();
   MX_FMC_Init();
   MX_USART2_UART_Init();
-  MX_I2C1_Init();
+  
   MX_ADC1_Init();
-  MX_RTC_Init();
+  if(!(RTC->ISR & RTC_ISR_INITS))MX_RTC_Init();
+  MX_I2C1_Init();
+  //rtc_lse_error = rtc_Init();
   //if(!(*(volatile uint32_t *) (BDCR_RTCEN_BB)))__HAL_RCC_RTC_ENABLE();
   MX_USB_DEVICE_Init();
 
@@ -1309,10 +1326,10 @@ __HAL_RCC_BACKUPRESET_RELEASE();
  
   
   
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI|RCC_OSCILLATORTYPE_LSE;//|RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
   //RCC_OscInitStruct.HSEState = RCC_HSE_OFF;//HSE_BYPASS
-  RCC_OscInitStruct.LSEState = RCC_LSE_BYPASS;
-  //RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  //RCC_OscInitStruct.LSEState = RCC_LSE_BYPASS;
+  //RCC_OscInitStruct.LSIState = RCC_LSI_OFF;
   RCC_OscInitStruct.MSIState = RCC_MSI_ON;
   RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_11;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
@@ -1322,6 +1339,7 @@ __HAL_RCC_BACKUPRESET_RELEASE();
   //RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
   //RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV6;
   //RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV4;
+  //__HAL_RCC_LSI_DISABLE();
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     rtc_lse_error = 1;
@@ -1346,7 +1364,7 @@ __HAL_RCC_BACKUPRESET_RELEASE();
   PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_SYSCLK;
   PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_SYSCLK;
   PeriphClkInit.AdcClockSelection = RCC_ADCCLKSOURCE_SYSCLK;
-  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
+  //PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
   PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_MSI;
   //PeriphClkInit.PLLSAI1.PLLSAI1Source = RCC_PLLSOURCE_MSI;
   //PeriphClkInit.PLLSAI1.PLLSAI1M = 1;
@@ -1358,13 +1376,19 @@ __HAL_RCC_BACKUPRESET_RELEASE();
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
+    rtc_lse_error = 1;
   }
+  
+ 
+  
+  
   /**Configure the main internal regulator output voltage 
   */
   if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1) != HAL_OK)
   {
     Error_Handler();
   }
+
 }
 
 /**
@@ -1508,6 +1532,37 @@ static void MX_RTC_Init(void)
   /* USER CODE END RTC_Init 1 */
   /**Initialize RTC Only 
   */
+  
+//if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1) != 0x32F2){  
+  //__HAL_RTC_WRITEPROTECTION_DISABLE(&hrtc);
+ 
+  RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+  HAL_PWR_EnableBkUpAccess();
+  
+  __HAL_RCC_RTC_DISABLE();
+    __HAL_RCC_BACKUPRESET_FORCE();
+    __HAL_RCC_BACKUPRESET_RELEASE(); 
+    
+    
+  //__HAL_RCC_BKP_CLK_ENABLE();
+  
+  RCC->BDCR |= RCC_BDCR_LSEBYP;
+  //Включаем LSE
+  RCC->BDCR |= RCC_BDCR_LSEON;  
+  // Ждем его готовности
+  while (!(RCC->BDCR & RCC_BDCR_LSEON)){} 
+  //Выбираем LSE в качестве источника (кварц 32768) 
+  RCC->BDCR |= RCC_BDCR_RTCSEL_0;
+  //RCC->BDCR |= RCC_BDCR_LSCOSEL;
+  //RCC->BDCR &= ~RCC_BDCR_RTCSEL_1;
+  //Включаем тактирование RTC
+  RCC->BDCR |= RCC_BDCR_RTCEN; 
+  HAL_RTC_WaitForSynchro(&hrtc);
+  //__HAL_RCC_RTC_ENABLE();
+  //HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, 0x32F2);
+  //__HAL_RTC_WRITEPROTECTION_ENABLE(&hrtc);
+//}
+  
   hrtc.Instance = RTC;
   hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
   hrtc.Init.AsynchPrediv = 127;
@@ -1524,7 +1579,7 @@ static void MX_RTC_Init(void)
   */
   sTamper.Tamper = RTC_TAMPER_1;
   sTamper.Trigger = RTC_TAMPERTRIGGER_RISINGEDGE;
-  sTamper.NoErase = RTC_TAMPER_ERASE_BACKUP_ENABLE;
+  sTamper.NoErase = RTC_TAMPER_ERASE_BACKUP_DISABLE;
   sTamper.MaskFlag = RTC_TAMPERMASK_FLAG_DISABLE;
   sTamper.Filter = RTC_TAMPERFILTER_DISABLE;
   sTamper.SamplingFrequency = RTC_TAMPERSAMPLINGFREQ_RTCCLK_DIV32768;
@@ -1542,8 +1597,13 @@ static void MX_RTC_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN RTC_Init 2 */
-  HAL_RTCEx_EnableBypassShadow(&hrtc);
+  hrtc.State = HAL_RTC_STATE_READY;
+  //HAL_RTCEx_EnableBypassShadow(&hrtc);
+  HAL_PWR_DisableBkUpAccess();
+  //HAL_RTCEx_DisableBypassShadow(&hrtc);
   /* USER CODE END RTC_Init 2 */
+		//Проверяем тикают ли часики
+                //if(RTC->ISR & RTC_ISR_INITS) return;
 
 }
 
@@ -1759,7 +1819,78 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+uint8_t rtc_Init(void)                                                                     // Инициализация модуля
+  {
+    uint8_t returned = 0;
+    if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1) != 0x32F2){ 
+//{
+//RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR, ENABLE);
+//PWR_BackupAccessCmd(ENABLE);
+//RCC_BackupResetCmd(ENABLE);
+//RCC_BackupResetCmd(DISABLE);
+//RCC_LSEConfig(RCC_LSE_ON);                                                            // Enable the LSE OSC
+//while(RCC_GetFlagStatus(RCC_FLAG_LSERDY) == RESET){}                                  // Wait till LSE is ready
+//RCC_RTCCLKConfig(RCC_RTCCLKSource_LSE);                                               // Select the RTC Clock Source
+//RCC_RTCCLKCmd(ENABLE);
+//RTC_StructInit(&RTC_InitStructure);
+//RTC_InitStructure.RTC_HourFormat = RTC_HourFormat_24;
+//RTC_InitStructure.RTC_AsynchPrediv = 127;
+//RTC_InitStructure.RTC_SynchPrediv = 255;
+//RTC_Init(&RTC_InitStructure);    
 
+  uint32_t LSERDY_time_out = 0xFFFF;
+  uint32_t ALRA_time_out   = 0xFFFF;
+  
+  
+  RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+  PWR->CR1 |= PWR_CR1_DBP;                                                                // Open access to Backup regs
+//RCC->BDCR |= RCC_BDCR_BDRST;
+//RCC->BDCR &= ~RCC_BDCR_BDRST;
+  
+  RCC->BDCR |= RCC_BDCR_LSEBYP;
+  //RCC->BDCR |= RCC_BDCR_LSEON;
+  
+  while((!(RCC->BDCR & RCC_BDCR_LSERDY))&&(LSERDY_time_out != 0))                       // Проверка наличия клока LS (сопоставить поля с user manual)
+    {
+    LSERDY_time_out--;
+    }
+  if(LSERDY_time_out==0) returned = 1;                                                  // Бит 0 = 1 если нет LS клока
+  
+//RCC->BDCR |= RCC_BDCR_RTCSEL_0;
+  RCC->BDCR = (RCC->BDCR & (~RCC_BDCR_RTCSEL)) | RCC_BDCR_RTCSEL_0;       
+  RCC->BDCR |= RCC_BDCR_RTCEN;
+  //RTC_WaitForSynchro();
+  HAL_RTC_WaitForSynchro(&hrtc);
+  RTC->WPR = 0xCA;                                                                      // Open access to RTC
+  RTC->WPR = 0x53;                                                                      // Open access to RTC
+  RTC->CR &= ~RTC_CR_FMT;                                                               // 24h format
+  RTC->PRER |= 0xFF;
+  RTC->PRER |= (uint32_t)(0x7F << 16);	
+  //Alarm A Every 1 second
+  //RTC->ISR = ~RTC_ISR_ALRAF; //STM32 is stuck
+  //EXTI->PR = EXTI_PR_PR17;
+  //EXTI->IMR |= EXTI_IMR_MR17;
+  //EXTI->EMR &= ~EXTI_EMR_MR17;
+  //EXTI->RTSR |= EXTI_RTSR_TR17;	
+//  NVIC_EnableIRQ(RTC_Alarm_IRQn);
+  RTC->CR &= ~RTC_CR_ALRAE;
+  
+  while((!(RTC->ISR & RTC_ISR_ALRAWF))&&(ALRA_time_out != 0))
+    {
+    ALRA_time_out--;
+    }	
+  if(ALRA_time_out==0) returned |= 2;                                                   // Бит 1 = 1 если не Alarm A update allowed;
+  
+  RTC->ALRMAR |= RTC_ALRMAR_MSK1 | RTC_ALRMAR_MSK2 | RTC_ALRMAR_MSK3 | RTC_ALRMAR_MSK4 | RTC_ALRMAR_SU_0;//Alarm every 1 second
+  RTC->CR |= RTC_CR_ALRAE;
+  RTC->CR |= RTC_CR_ALRAIE;
+  RTC->WPR = 0xFF;                                                                      // Close access to RTC
+  HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, 0x32F2);
+//}
+  
+    }
+    return returned;
+  }
 /* USER CODE END 4 */
 
 /**

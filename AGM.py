@@ -21,12 +21,16 @@ class CommonWindow(QtWidgets.QWidget):
 	"""Класс основного окна программы"""
 	
 	def __init__(self, parent = None):
-		QtWidgets.QWidget.__init__(self, parent)
+		QtWidgets.QMainWindow.__init__(self, parent)
+
+		#widget = QtWidgets.QWidget(self)
+		#self.setCentralWidget(widget)
 
 		self.data = [0]#test data value for plot
 		self.parsed_data_list = list()
 		self.records_header_list = list()
 		self.records_tool_passage_time = list()
+		self.records_description = list()
 		self.data_download_done = 0
 		self.data_load_from_file_done = 0
 		#pg.plot(data)
@@ -41,8 +45,8 @@ class CommonWindow(QtWidgets.QWidget):
 		self.last_clicked_plot = 0
 		#pg.setConfigOption('background', 'd')
 		pg.setConfigOption('foreground', 'g')	
-		self.label_graph = pg.LabelItem(text = "x and y", color = "CCFF00")#justify='right'
-		self.graph = pg.PlotWidget(name = self.label_graph)
+		#self.label_graph = pg.LabelItem(text = "x and y", color = "CCFF00")#justify='right'
+		self.graph = pg.PlotWidget()
 		self.lastClicked = []
 		#PlotCurveItem   PlotWidget
 		self.graph.showGrid(1,1,1)
@@ -61,7 +65,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.hLine = pg.InfiniteLine(angle=0, movable=False, pen = pg.mkPen('y', width = 1))
 		self.graph.addItem(self.vLine, ignoreBounds=True)
 		self.graph.addItem(self.hLine, ignoreBounds=True)
-
+		self.graph.setRange(yRange = (0,4095))
 
 		#f(x) = f(x1)+(x-x1)*((f(x2)-f(x1))/(x2-x1)) 
 
@@ -80,7 +84,8 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.btnStartMeas.setIcon(QtGui.QIcon("icon.png"))
 		self.btnInterruptMeas = QtWidgets.QPushButton("Interrupt process")
 
-		
+		self.notch_int_value = 90 #50Hz value for notch filter
+		self.usb_order_cnt = 0
 		self.ComPort = str
 		self.comport_combo = QtWidgets.QComboBox()
 		self.comport_combo.addItems([""])
@@ -94,11 +99,9 @@ class CommonWindow(QtWidgets.QWidget):
 		vertical_size = 30
 		horizontal_size = 80
 		
-		self.onlyInt = QtGui.QIntValidator(1,999)
+		self.onlyInt = QtGui.QIntValidator(1,1000)
 		#self.LineEdit.setValidator(self.onlyInt)
-		self.filterSliderLimits = QtGui.QIntValidator(0, 999, self)
-		self.filterSliderLimits.setRange(0,255)
-		self.filterSliderLimits.setTop(255)
+		
 		
 		#self.label_cord = QtWidgets.QLabel("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
 		#self.label_cord.setMaximumSize(240,60)
@@ -126,7 +129,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_visa_disconnect.setDisabled(True)
 		
 		
-		self.agm_serial_number = QtWidgets.QLineEdit("001")
+		self.agm_serial_number = QtWidgets.QLineEdit("001")#center frequency for nwa
 		self.agm_serial_number.setMaximumSize(horizontal_size,vertical_size)
 		self.agm_serial_number.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 		self.agm_serial_number.setValidator(self.onlyInt)
@@ -136,23 +139,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_utc.addItems(["UTC+0", "UTC+1", "UTC+2", "UTC+3","UTC+4", "UTC+5","UTC+6","UTC+7","UTC+8", "UTC+9","UTC+10", "UTC+11", "UTC+12"])
 		self.agm_utc.setMaximumSize(horizontal_size,vertical_size)
 		self.agm_utc.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
-
-
-		self.agm_filter_configure_line = QtWidgets.QLineEdit()
-		self.agm_filter_configure_line.setMaximumSize(horizontal_size,vertical_size)
-		self.agm_filter_configure_line.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
-		self.agm_filter_configure_line.setAlignment(QtCore.Qt.AlignCenter)
-		self.agm_filter_configure_line.setValidator(self.filterSliderLimits)
-		self.agm_filter_configure_line.setPlaceholderText("127")
-
-		self.btn_filter_configure = QtWidgets.QPushButton("SetValue")
-		self.btn_filter_configure.setMaximumSize(horizontal_size,vertical_size)
-		self.btn_filter_configure.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)#Fixed		
-		self.btn_filter_configure.setDisabled(True)
-
-		self.agm_filter_configure_label = QtWidgets.QLabel("ADC:0000")
-		self.agm_filter_configure_label.setMaximumSize(horizontal_size,vertical_size)
-		self.agm_filter_configure_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Maximum)
 
 		#vertical_size = 30
 		#horizontal_size = 200		
@@ -199,17 +185,18 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.movie.start()
 		
 		self.table_of_records = QtWidgets.QTableWidget(self)
-		self.table_of_records.setColumnCount(6)
+		self.table_of_records.setColumnCount(7)
 		self.table_of_records.setMinimumSize(400,200)
 		self.table_of_records.setMaximumSize(2000,2700)
 		self.table_of_records.setRowCount(200)
-		self.table_of_records.setHorizontalHeaderLabels(["	Date  ", "	Time  ","Signal\nType","   GPS	 ", "Recording\nduration", "Tool passage\ntime"])
+		self.table_of_records.setHorizontalHeaderLabels(["	Date  ", "	Time  ","Signal\nType","   GPS	 ", "Recording\nduration", "Tool passage\ntime", "Description"])
 		self.table_of_records.horizontalHeaderItem(0).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(1).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(2).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(3).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(4).setTextAlignment(QtCore.Qt.AlignCenter)
 		self.table_of_records.horizontalHeaderItem(5).setTextAlignment(QtCore.Qt.AlignCenter)
+		self.table_of_records.horizontalHeaderItem(6).setTextAlignment(QtCore.Qt.AlignCenter)
 		
 		self.table_of_records.horizontalHeader().setStretchLastSection(False)
 		
@@ -229,6 +216,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.table_of_records.setColumnWidth(3, 200)
 		self.table_of_records.setColumnWidth(4, 100)
 		self.table_of_records.setColumnWidth(5, 100)
+		self.table_of_records.setColumnWidth(6, 100)
 		#self.table_of_records.resizeRowsToContents()
 		#self.table_of_records.resizeColumnsToContents()
 		#self.table_of_records.setRowHeight(0,40)
@@ -270,7 +258,11 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_clear.setMaximumSize(horizontal_size,vertical_size)
 		self.btn_clear.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 
-		
+
+		self.btn_notch_open_window = QtWidgets.QPushButton("Notch Filter")
+		self.btn_notch_open_window.setMaximumSize(horizontal_size,vertical_size)
+		self.btn_notch_open_window.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
+
 		self.grid = QtWidgets.QGridLayout()
 		self.grid_2 = QtWidgets.QGridLayout()
 		self.grid_plot_labels = QtWidgets.QGridLayout()
@@ -293,6 +285,10 @@ class CommonWindow(QtWidgets.QWidget):
 		self.grid.addWidget(self.btn_clear,4,2)
 		self.grid.addWidget(self.btn_clear_table, 5, 1)
 		self.grid.addWidget(self.btn_load_file, 5,0)
+
+		#self.grid.addWidget(self.label_set_potentiometr, 6,0,1,1)
+		#self.grid.addWidget(self.btn_set_potentiometr, 6,1,1,1)
+		self.grid.addWidget(self.btn_notch_open_window, 6,2,1,1)
 			
 		#self.grid_plot_labels.addWidget(self.label_cord, 0, 0)
 		self.grid_plot_labels.addWidget(self.btn_cord_fixed, 0,0)
@@ -311,9 +307,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.grid_2.addWidget(QtWidgets.QLabel(""),8,2)
 		self.grid_2.addWidget(QtWidgets.QLabel(""),8,3)
 
-		self.grid.addWidget(self.agm_filter_configure_line,6,0)
-		self.grid.addWidget(self.btn_filter_configure,6,1)
-		self.grid.addWidget(self.agm_filter_configure_label,6,2)
+
 		self.grid.addWidget(QtWidgets.QLabel(""),7,0)
 		self.grid.addWidget(QtWidgets.QLabel(""),7,1)
 		self.grid.addWidget(QtWidgets.QLabel(""),7,2)
@@ -385,17 +379,19 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_serial_number.setDisabled(True)
 		self.agm_filterbox.setDisabled(True)
 		self.agm_utc.setDisabled(True)
-		
+		self.btn_notch_open_window.setDisabled(True)
 		self.meas_thread = evThread()
 
 		self.btn_visa_connect.clicked.connect(self.on_connected)
 		self.btn_visa_connect.clicked.connect(self.on_get_current_path)
 		self.btn_visa_disconnect.clicked.connect(self.on_disconnected)
-		#self.btn_save.clicked.connect(self.on_save_to_file)
-		self.btn_save.clicked.connect(self.on_save_file_dialog)
+		self.btn_save.clicked.connect(self.on_save_to_file)
 		self.btn_load_file.clicked.connect(self.on_load_from_file) 
 		self.btn_clear_table.clicked.connect(self.on_clear_table)
 		self.agm_serial_number.editingFinished.connect(self.on_change_serial_number)
+
+
+		#self.btn_set_potentiometr.clicked.connect(self.on_set_notch_potentiometr)
 
 		self.btn_cord_fixed.clicked.connect(self.on_captured)
 		self.btn_load.clicked.connect(self.on_start_load)
@@ -406,12 +402,18 @@ class CommonWindow(QtWidgets.QWidget):
 		self.meas_thread.progress.connect(self.on_progress_go,QtCore.Qt.QueuedConnection)
 		
 		self.btn_clear.clicked.connect(self.on_clear)
-		#self.pwindow = paramWindow()
-		#self.btnSetCF.clicked.connect(self.on_choose_param)
-		
+
+		self.pwindow = paramWindow()
+		self.btn_notch_open_window.clicked.connect(self.on_open_notch_window)
+
+		self.pwindow.btn_notch_apply.clicked.connect(self.on_apply_notch_settings)
+		#self.pwindow.btn_notch_set_value.clicked.connect(self.on_set_notch_potentiometr)
+		self.pwindow.btn_notch_set_value_down.clicked.connect(self.on_set_notch_potentiometr_down)
+		self.pwindow.btn_notch_set_value.clicked.connect(self.on_set_notch_potentiometr)
+		self.pwindow.notch_type_box.currentIndexChanged.connect(self.on_notch_type_changed)
 		#self.agm_recordbutton.clicked.connect(self.on_display_record)
 		self.table_of_records.itemClicked.connect(self.on_change_table_item)
-		
+		self.table_of_records.itemChanged.connect(self.on_change_description)
 		self.agm_filterbox.activated.connect(self.on_change_notch_filter)
 		self.agm_utc.activated.connect(self.on_change_utc_timezone)
 		#self.comport_combo.activated.connect(self.on_activated_com_list)
@@ -420,10 +422,136 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.curve.sigClicked.connect(self.clicked_point)
 		#self.curve.sigPointsClicked.connect(self.clicked_point)
 
+	def on_apply_notch_settings(self):
+		notch_type = self.pwindow.notch_type_box.currentIndex()
+		try:
+			self.ser.write(bytearray.fromhex('7f aa 01 07 {:02X} {:02X}'.format(notch_type,self.notch_int_value)))
+			self.ser.read(2)
+		except:
+			print("apply notch settings error")
+
+	def on_open_notch_window(self):
+		self.pwindow.resize(200,100)
+		self.pwindow.setWindowTitle("Notch Filter")
+
+
+		self.pwindow.show()
+	def on_notch_type_changed(self):
+		if self.pwindow.notch_type_box.currentIndex() == 0:
+			self.notch_int_value = 90
+			self.pwindow.notch_value_label.setText(str(self.notch_int_value))
+		else:
+			self.notch_int_value = 51
+			self.pwindow.notch_value_label.setText(str(self.notch_int_value))
+
+	def on_set_notch_potentiometr_down(self):
+		data_to_plotting = list()
+		plot_x = list()
+		for i in range(20):
+			plot_x.append(self.record_sampling_time*i)
+		try:
+			if self.notch_int_value != 0:
+				self.notch_int_value -= 1#(int)(self.pwindow.line_notch_value.text())#((int)(self.label_set_potentiometr.text()))
+			else:
+				self.notch_int_value = 0
+			#print(bytearray.fromhex('7f aa 01 02 {:02X} {:02X}'.format(adr_hi_byte, adr_lo_byte)))
+			print(bytearray.fromhex('7f aa 01 06 {:02X}'.format(self.notch_int_value)))
+			self.ser.write(bytearray.fromhex('7f aa 01 06 {:02X}'.format(self.notch_int_value)))
+			self.pwindow.notch_value_label.setText(str(self.notch_int_value))
+		except:
+			print("on_set_notch_potentiometr")	
+		try:
+
+			din = self.ser.read(4)#mcu send fixed size packet
+			parse_byte_list = list()
+
+			bytes_cnt = 2*int.from_bytes(din, byteorder='big', signed = False)
+			print(bytes_cnt)
+
+			din = self.ser.read(62)#mcu send fixed size packet
+			parse_byte_list = list()
+			for i in range(len(din)):
+				parse_byte_list.append(int(din[i]))
+
+			#string_for_label = ''
+			string_for_label = [f'0x{i:02X}' for i in parse_byte_list]
+			 
+			print(len(parse_byte_list), din, type(parse_byte_list[0]))
+
+
+
+			#data_to_plotting = notch_parse(parse_byte_list)
+			
+			print(string_for_label)	
+
+			for i in range(20):
+				data_to_plotting.append((parse_byte_list[2*i]<<8)+(parse_byte_list[2*i+1]))	
+			print(data_to_plotting)	
+			self.pwindow.graph_notch.clear()
+			self.pwindow.graph_notch.plot(plot_x, data_to_plotting, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
+		except:
+			print("on_set_notch_potentiometr part 2")			
+
+	def on_set_notch_potentiometr(self):
+		data_to_plotting = list()
+		plot_x = list()
+		for i in range(20):
+			plot_x.append(self.record_sampling_time*i)
+		try:
+			self.notch_int_value += 1#(int)(self.pwindow.line_notch_value.text())#((int)(self.label_set_potentiometr.text()))
+			if self.notch_int_value > 255:
+				self.notch_int_value = 255
+			
+			#print(bytearray.fromhex('7f aa 01 02 {:02X} {:02X}'.format(adr_hi_byte, adr_lo_byte)))
+			print(bytearray.fromhex('7f aa 01 06 {:02X}'.format(self.notch_int_value)))
+			self.ser.write(bytearray.fromhex('7f aa 01 06 {:02X}'.format(self.notch_int_value)))
+			self.pwindow.notch_value_label.setText(str(self.notch_int_value))
+		except:
+			print("on_set_notch_potentiometr")	
+		try:
+
+			din = self.ser.read(4)#mcu send fixed size packet
+			parse_byte_list = list()
+
+			bytes_cnt = 2*int.from_bytes(din, byteorder='big', signed = False)
+			print(bytes_cnt)
+
+			din = self.ser.read(62)#mcu send fixed size packet
+			parse_byte_list = list()
+			for i in range(len(din)):
+				parse_byte_list.append(int(din[i]))
+
+			#string_for_label = ''
+			string_for_label = [f'0x{i:02X}' for i in parse_byte_list]
+			 
+			print(len(parse_byte_list), din, type(parse_byte_list[0]))
+
+
+
+			#data_to_plotting = notch_parse(parse_byte_list)
+			
+			print(string_for_label)	
+
+			for i in range(20):
+				data_to_plotting.append((parse_byte_list[2*i]<<8)+(parse_byte_list[2*i+1]))	
+			print(data_to_plotting)	
+			self.pwindow.graph_notch.clear()
+			self.pwindow.graph_notch.plot(plot_x, data_to_plotting, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
+		except:
+			print("on_set_notch_potentiometr part 2")	
+	def notch_parse(self, data_input):
+		data_out = list()
+		try:
+			for i in range(20):
+				data_out.append((data_input[2*i]<<8)|(data_input[2*i+1]))
+		except:
+			print("parse error")
+		return data_out
+
 	def on_connected(self):
 		try:
 			self.ser = serial.Serial(self.ComPort, baudrate=115200, bytesize=serial.EIGHTBITS,
-									 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 2)
+									 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 1.5)
 			
 			self.ser.isOpen()  # try to open port
 			print("Connected to {}".format(self.ComPort))
@@ -436,6 +564,7 @@ class CommonWindow(QtWidgets.QWidget):
 			self.agm_serial_number.setDisabled(False)
 			self.agm_filterbox.setDisabled(False)
 			self.agm_utc.setDisabled(False)
+			self.btn_notch_open_window.setDisabled(False)
 		except IOError:
 			#pass
 			print("Port already open another programm")
@@ -445,6 +574,8 @@ class CommonWindow(QtWidgets.QWidget):
 			print("Unexpected error, Null ComName")
 	def on_change_serial_number(self):
 		if self.agm_serial_number.text() != self.previous_agm_serial_number:
+
+			
 			adr_hi_byte = ((int)(self.agm_serial_number.text())>>8)&0xFF
 			adr_lo_byte = ((int)(self.agm_serial_number.text())&0xff)
 			print(bytearray.fromhex('7f aa 01 02 {:02X} {:02X}'.format(adr_hi_byte, adr_lo_byte)))
@@ -475,6 +606,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_serial_number.setDisabled(True)
 		self.agm_filterbox.setDisabled(True)
 		self.agm_utc.setDisabled(True)	
+		self.btn_notch_open_window.setDisabled(True)
 		try:	
 			self.ser.close()
 		except:
@@ -497,7 +629,7 @@ class CommonWindow(QtWidgets.QWidget):
 			self.btn_visa_connect.setDisabled(False)
 				
 	def on_clear(self):
-		clear_res = QtWidgets.QMessageBox.question(self, "Подтверждение стирания памяти МК", "Очистить память модуля?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
+		clear_res = QtWidgets.QMessageBox.question(self, "Подтверждение стирания памяти МК", "Вы действительно хотите стереть данные?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
 		if clear_res == QtWidgets.QMessageBox.Yes:
 			#self.graph.clear()
 			#self.bar.setValue(0)
@@ -521,8 +653,9 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.graph.clear()
 		self.bar.setValue(0)
 		self.graph.clear()
+		self.on_clear_table()
 		self.meas_thread.start()
-		if self.first_load == 0:
+		'''if self.first_load == 0:
 			self.ser.write(bytearray.fromhex('7f aa 01 01 00 00'))
 			try:
 				self.ser.read(2)
@@ -531,10 +664,11 @@ class CommonWindow(QtWidgets.QWidget):
 
 			except:
 				print("first load failed")
-		if self.first_load == 1:
-			self.ser.write(bytearray.fromhex('7f aa 01 01 00 00'))
-			self.read_mcu()
-
+				'''
+		#if self.first_load == 1:
+		#self.ser.write(bytearray.fromhex('7f aa 01 01 00 00'))
+		#self.read_mcu()
+		self.read_mcu_packed()
 		#self.data = self.readblock = self.ser.read(2048)
 	
 		#self.agm_readblock.setText(self.readblock.decode("utf-8"))
@@ -581,6 +715,11 @@ class CommonWindow(QtWidgets.QWidget):
 			tool_str = self.records_tool_passage_time[current_index]
 		else:
 			tool_str = ""
+		if type(self.records_description[current_index]) == str:
+			description_str = self.records_description[current_index]
+		else:
+			description_str = ""
+			
 
 		try:
 			self.table_of_records.setItem(current_index,0,QtWidgets.QTableWidgetItem(utc_date_str))#full date 06.12.19
@@ -595,6 +734,8 @@ class CommonWindow(QtWidgets.QWidget):
 			self.table_of_records.item(current_index, 4).setTextAlignment(QtCore.Qt.AlignCenter|QtCore.Qt.AlignVCenter)
 			self.table_of_records.setItem(current_index,5,QtWidgets.QTableWidgetItem(tool_str))	#tool passage time
 			self.table_of_records.item(current_index, 5).setTextAlignment(QtCore.Qt.AlignCenter|QtCore.Qt.AlignVCenter)
+			self.table_of_records.setItem(current_index,6,QtWidgets.QTableWidgetItem(description_str))	#tool passage time
+			self.table_of_records.item(current_index, 6).setTextAlignment(QtCore.Qt.AlignCenter|QtCore.Qt.AlignVCenter)			
 		except:
 			print("table setItem error")
 
@@ -603,6 +744,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.parsed_data_list = list()
 		self.records_tool_passage_time = list()
 		self.records_header_list = list()
+		self.records_description = list()
 
 		record_index_list = list()
 		records_parse_data = list()
@@ -630,13 +772,18 @@ class CommonWindow(QtWidgets.QWidget):
 			self.records_header_list.append(header)
 
 			self.records_tool_passage_time.append(0)#total length equal to records cnt
+			self.records_description.append(0)
 
 			self.header_processing(i, header, int((len(records_parse_data[i])-34)/2) )
 			temp_data_unparsed = records_parse_data[i][34:]
 			temp_data = list()
 			for j in range(int(len(temp_data_unparsed)/2)):
 				if ((temp_data_unparsed[2*j]<<8)|(temp_data_unparsed[2*j+1])) != 0x7faa:
-					temp_data.append((temp_data_unparsed[2*j]<<8)|(temp_data_unparsed[2*j+1]))
+					if (j>2) and (j<(int(len(temp_data_unparsed)/2)-2)):
+						if (((temp_data_unparsed[2*j]<<8)|(temp_data_unparsed[2*j+1])) != 0x00) and (((temp_data_unparsed[2*j+2]<<8)|(temp_data_unparsed[2*j+3])) != 0x00) and (((temp_data_unparsed[2*j-2]<<8)|(temp_data_unparsed[2*j+1-2])) != 0x00):
+							temp_data.append((temp_data_unparsed[2*j]<<8)|(temp_data_unparsed[2*j+1]))
+					else:
+						temp_data.append((temp_data_unparsed[2*j]<<8)|(temp_data_unparsed[2*j+1]))
 
 			self.parsed_data_list.append(temp_data)
 		print(len(self.parsed_data_list))
@@ -649,22 +796,22 @@ class CommonWindow(QtWidgets.QWidget):
 		
 	def on_save_to_file(self):
 		
-		self.data_to_file(strftime("%Y-%m-%d_%Hh%Mm%Ss", gmtime()), self.parsed_data_list)
-		self.on_save_file_dialog()	
+		self.data_to_file(strftime("%Y-%m-%d_%Hh%Mm%Ss", gmtime()), self.parsed_data_list)	
 
 	def data_to_file(self, name = "agm_data", agm_data=[0,0]):
-		dict_to_save = {'header':self.records_header_list, 'captured_time':self.records_tool_passage_time, 'data':self.parsed_data_list}
+		dict_to_save = {'header':self.records_header_list, 'captured_time':self.records_tool_passage_time,'description':self.records_description, 'data':self.parsed_data_list}
 		print(dict_to_save)
 		dict_filename = "{}\\agm_{}.npy".format(os.path.dirname(os.path.abspath(__file__)),name)
 		filename = "{}\\agm_{}.dat".format(os.path.dirname(os.path.abspath(__file__)),name)
 		try:
 			#for i in range(len(agm_data)):
 			#	np.savetxt(filename, agm_data[i], delimiter = ',')#, fmt='%x')
+				
 			np.save(dict_filename, dict_to_save)
 			print("saved")
 
 		except Exception:
-			pass#traceback.print_exc()
+			traceback.print_exc()
 
 	def on_load_from_file(self):
 		fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')[0]
@@ -674,6 +821,7 @@ class CommonWindow(QtWidgets.QWidget):
 				#print(data_dict)
 				self.parsed_data_list = list()
 				self.records_tool_passage_time = list()
+				self.records_description = list()
 				self.records_header_list = list()
 				self.table_of_records.setRowCount(0)
 				self.table_of_records.setRowCount(200)
@@ -681,6 +829,7 @@ class CommonWindow(QtWidgets.QWidget):
 				self.graph.clear()
 				self.records_header_list = data_items['header']
 				self.records_tool_passage_time = data_items['captured_time']
+				self.records_description = data_items['description']
 				self.parsed_data_list = data_items['data']	
 				self.data_download_done = 1
 				for i in range(len(data_items['header'])):
@@ -688,22 +837,6 @@ class CommonWindow(QtWidgets.QWidget):
 				self.btn_save.setDisabled(False)
 			except:
 				pass								
-
-	def on_save_file_dialog(self):
-		options = QFileDialog.Options()
-		#options |= QFileDialog.DontUseNativeDialog
-
-		fname = QFileDialog.getSaveFileName(self, 'Save File','agm_', "NPY (*.npy)",options = options)[0]
-		if fname:
-			print(fname)
-			try:
-				dict_to_save = {'header':self.records_header_list, 'captured_time':self.records_tool_passage_time, 'data':self.parsed_data_list}
-				np.save(fname, dict_to_save)
-				pass
-
-			except:
-				print("save file error")
-		
 
 	def on_clear_table(self):
 		self.table_of_records.setRowCount(0)
@@ -716,10 +849,11 @@ class CommonWindow(QtWidgets.QWidget):
 		self.data_download_done = 0
 		self.data_load_from_file_done = 0
 	def read_mcu(self):
+
 		try:
 			ba = self.ser.read(4)#mcu send fixed size packet
 			parse_byte_list = list()
-
+			print(ba)
 			bytes_cnt = 2*int.from_bytes(ba, byteorder='big', signed = False)
 			print(bytes_cnt)
 
@@ -743,8 +877,46 @@ class CommonWindow(QtWidgets.QWidget):
 			self.data_processing(ba)
 		except:
 			print("Unexpected error, read mcu func")
+	def read_mcu_packed(self):
+		data_to_plotting = list()
+		parse_byte_list = list()
 
+
+		try:
+			self.ser.write(bytearray.fromhex('7f aa 01 08 00'))
+			time.sleep(0.1)
+			self.ser.read(66)
+		except:
+			pass
 		
+		self.usb_order_cnt += 1
+		self.ser.write(bytearray.fromhex('7f aa 01 08 01 {:02X}'.format(self.usb_order_cnt)))
+		time.sleep(0.1)
+		cmdDataIn = self.ser.read(66)
+		print(cmdDataIn)
+		bytes_cnt = 2*int.from_bytes(cmdDataIn[6:10], byteorder='big', signed = False)
+
+		#40 byte per packet
+		packetCnt = bytes_cnt / 40
+		barInc = 100/packetCnt
+
+
+		print(bytes_cnt, packetCnt, barInc)
+		self.bar.setValue(1)
+		try:
+			for i in range(int(packetCnt)):
+				self.ser.write(bytearray.fromhex('7f aa 01 08 01 {:02X}'.format(self.usb_order_cnt)))
+				time.sleep(0.1)
+				din = self.ser.read(66)
+				parse_byte_list.extend(din[6:46])
+				self.bar.setValue((i+1)*barInc)
+			print(len(parse_byte_list))
+			print(parse_byte_list)	
+		except:
+			print("read block error")
+
+		self.data_processing(parse_byte_list)	
+
 	def on_meas_completed(self):
 		self.btn_load.setDisabled(False)
 		self.btn_save.setDisabled(False)
@@ -762,7 +934,8 @@ class CommonWindow(QtWidgets.QWidget):
 		self.xpos = 0
 		self.ypos = 0
 		#self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
-		self.graph.enableAutoRange(enable=True)
+		#self.graph.enableAutoRange(ViewBox.YAxis, enable=False)
+		#self.graph.enableAutoRange(ViewBox.XAxis, enable=True)
 		self.graph.showGrid(1,1,1)
 		self.graph.addItem(self.vLine, ignoreBounds=True)
 		self.graph.addItem(self.hLine, ignoreBounds=True)	
@@ -772,19 +945,28 @@ class CommonWindow(QtWidgets.QWidget):
 
 		self.curve = self.graph.plot(self.plot_xaxis,self.parsed_data_list[self.current_row], pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10, title = "Record №{}".format(self.record_number))
 		self.curve.curve.setClickable(True)
-		self.curve.sigPointsClicked.connect(self.clicked_point)		
+
+		self.curve.sigPointsClicked.connect(self.clicked_point)	
+
+	def on_change_description(self, item):
+		if item.column() == 6:
+			self.records_description[item.row()] = item.text()		
 	def on_change_table_item(self, item):
 		self.previous_row = self.current_row
 		self.current_row = item.row()
-		for j in range(6):
-			self.table_of_records.item(self.current_row, j).setBackground(QtGui.QColor(100,200,50))
-			if self.previous_row != -1:
-				self.table_of_records.item(self.previous_row, j).setBackground(QtGui.QColor(255,255,255))
-		if	self.current_row != self.previous_row:
-			try:
-				self.on_display_record()
-			except:
-				pass
+		try:
+			for j in range(7):
+				self.table_of_records.item(self.current_row, j).setBackground(QtGui.QColor(100,200,50))
+				if self.previous_row != -1:
+					self.table_of_records.item(self.previous_row, j).setBackground(QtGui.QColor(255,255,255))
+			if	self.current_row != self.previous_row:
+			
+				try:
+					self.on_display_record()
+				except:
+					pass
+		except:
+			print("setBackgroud error")
 		
 	def mouseMoved(self, evt):
 	    pos = evt[0]  ## using signal proxy turns original arguments into a tuple
@@ -838,10 +1020,11 @@ class CommonWindow(QtWidgets.QWidget):
 			print("no available data")
 
 	def closeEvent(self, event):#перехватываем событие закрытия приложения
-		result = QtWidgets.QMessageBox.question(self, "Выход из программы", "Выйти из программы?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
+		result = QtWidgets.QMessageBox.question(self, "Подтверждение закрытия окна", "Вы действительно хотите закрыть окно?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
 		if result == QtWidgets.QMessageBox.Yes:
 		
 			self.hide()
+			self.pwindow.close()
 			self.meas_thread.running = False
 			self.meas_thread.wait(5000)#ms
 			event.accept()
@@ -906,7 +1089,79 @@ class ppData:
 		dataFromFile = (list)
 		
 
+class paramWindow(QtWidgets.QWidget):
+	def __init__(self, parent = None):
+		QtGui.QWidget.__init__(self, parent)
+		self.title_label = QtWidgets.QLabel("Notch Filter configure")
+		self.title_label.setAlignment(QtCore.Qt.AlignHCenter)
+		self.validInt = QtGui.QIntValidator(1,255)
+		
+		self.notch_value_label = QtWidgets.QLabel("90")
+		self.notch_value_label.setAlignment(QtCore.Qt.AlignHCenter)
+		self.notch_value_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+		
 
+		self.label_notch_filter_value = 90
+
+		self.line_notch_value = QtWidgets.QLineEdit("090")#center frequency for nwa
+		self.line_notch_value.setMaximumSize(100,50)
+		self.line_notch_value.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+		self.line_notch_value.setValidator(self.validInt)
+		self.line_notch_value.setAlignment(QtCore.Qt.AlignCenter)
+		self.line_notch_value.setFont(QtGui.QFont('Arial', 13))  
+
+		self.notch_type_box = QtWidgets.QComboBox(self)#span for nwa
+		self.notch_type_box.addItems(["50Hz", "60Hz"])
+		self.notch_type_box.setMaximumSize(100,50)
+		self.notch_type_box.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+
+		self.btn_notch_set_value = QtWidgets.QPushButton("Freq+>>")
+		self.btn_notch_set_value.setMaximumSize(100,50)
+		self.btn_notch_set_value.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+
+		self.btn_notch_set_value_down = QtWidgets.QPushButton("<<Freq-")
+		self.btn_notch_set_value_down.setMaximumSize(100,50)
+		self.btn_notch_set_value_down.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+
+
+		self.btn_notch_apply = QtWidgets.QPushButton("Apply changes")
+		self.btn_notch_apply.setMaximumSize(100,50)
+		self.btn_notch_apply.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+
+		self.vbox_notch_param = QtWidgets.QVBoxLayout()
+		self.hbox_notch_param = QtWidgets.QHBoxLayout()
+
+		self.hbox_notch_param.addWidget(self.btn_notch_set_value_down,0)
+		self.hbox_notch_param.addWidget(self.notch_value_label,1)
+		self.hbox_notch_param.addWidget(self.btn_notch_set_value,2)
+		self.hbox_notch_param.addWidget(QtWidgets.QLabel(""),3)
+
+
+		self.vbox_notch_param.addWidget(self.notch_type_box, 0)		
+		self.vbox_notch_param.addLayout(self.hbox_notch_param, 1)
+		#self.vbox_notch_param.addWidget(self.line_notch_value, 2)
+		self.vbox_notch_param.addWidget(self.btn_notch_apply, 2)
+		self.vbox_notch_param.addWidget(QtWidgets.QLabel(""),3)
+
+		pg.setConfigOption('foreground', 'g')	
+		self.graph_notch = pg.PlotWidget()
+		self.graph_notch.showGrid(1,1,1)
+		
+		self.graph_notch.setLabel('bottom', "Time, sec")
+		self.graph_notch.setMinimumSize(500,200)
+
+		self.hbox_notch = QtWidgets.QHBoxLayout()
+		self.hbox_notch.addWidget(self.graph_notch)
+		self.hbox_notch.insertLayout(1,self.vbox_notch_param)
+		
+		self.vbox_notch = QtWidgets.QVBoxLayout()
+		self.vbox_notch.insertLayout(0,self.hbox_notch)
+		self.vbox_notch.insertLayout(1,self.hbox_notch)
+		self.vbox_notch.insertStretch(2,0)
+
+		self.setLayout(self.vbox_notch)
+		
+		
 			
 		
 def serial_ports():
