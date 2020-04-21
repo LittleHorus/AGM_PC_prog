@@ -144,6 +144,7 @@ ADC_HandleTypeDef hadc1;
 I2C_HandleTypeDef hi2c1;
 
 RTC_HandleTypeDef hrtc;
+RTC_HandleTypeDef RtcHandle;
 
 UART_HandleTypeDef huart2;
 
@@ -205,6 +206,7 @@ struct gps_status_struct{
   
 }agm_gps_status;
 
+uint32_t backupReadData = 0, test_point = 0;
 
 uint8_t buff_temp[200], buff_temp_cnt = 0;
 uint8_t buzzer_alarm = 0;
@@ -244,6 +246,9 @@ static void MX_ADC1_Init(void);
 static void MX_RTC_Init(void);
 uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len);
 uint8_t rtc_Init();
+
+static void calendarInit(void);
+static void rtcInit(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -677,6 +682,106 @@ void usb_tx(){
 
     }//usb receive cmd
 }
+
+#if DEVICE_RTC_LSI 
+ static int rtc_inited = 0; 
+#endif 
+ 
+static RTC_HandleTypeDef RtcHandle;
+ 
+void rtc_init(void)
+{
+    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+    RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+    uint32_t rtc_freq = 0;
+
+    RtcHandle.Instance = RTC;
+ 
+    // Enable Power clock
+    __HAL_RCC_PWR_CLK_ENABLE();
+ 
+    // Enable access to Backup domain
+    HAL_PWR_EnableBkUpAccess();
+ 
+    // Reset Backup domain
+    __HAL_RCC_BACKUPRESET_FORCE();
+    __HAL_RCC_BACKUPRESET_RELEASE();
+ 
+ 
+    // Enable LSE Oscillator
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI | RCC_OSCILLATORTYPE_LSE;
+    RCC_OscInitStruct.PLL.PLLState   = RCC_PLL_NONE; // Mandatory, otherwise the PLL is reconfigured!
+    RCC_OscInitStruct.LSEState       = RCC_LSE_ON; // External 32.768 kHz clock on OSC_IN/OSC_OUT
+    RCC_OscInitStruct.LSIState       = RCC_LSI_OFF;
+    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) == HAL_OK) { // Check if LSE has started correctly
+        // Connect LSE to RTC
+        PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RTC;
+        PeriphClkInitStruct.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
+        HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct);
+        rtc_freq = LSE_VALUE;
+    }
+    else {
+      
+    }
+
+ 
+    // Enable RTC
+    __HAL_RCC_RTC_ENABLE();
+ 
+    RtcHandle.Init.HourFormat     = RTC_HOURFORMAT_24;
+    RtcHandle.Init.AsynchPrediv   = 127;
+    RtcHandle.Init.SynchPrediv    = (rtc_freq / 128) - 1;
+    RtcHandle.Init.OutPut         = RTC_OUTPUT_DISABLE;
+    RtcHandle.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
+    RtcHandle.Init.OutPutType     = RTC_OUTPUT_TYPE_OPENDRAIN;
+ 
+    if (HAL_RTC_Init(&RtcHandle) != HAL_OK) {
+        
+    }
+}
+ 
+void rtc_free(void)
+{
+    // Enable Power clock
+    __HAL_RCC_PWR_CLK_ENABLE();
+ 
+    // Enable access to Backup domain
+    HAL_PWR_EnableBkUpAccess();
+ 
+    // Reset Backup domain
+    __HAL_RCC_BACKUPRESET_FORCE();
+    __HAL_RCC_BACKUPRESET_RELEASE();
+ 
+    // Disable access to Backup domain
+    HAL_PWR_DisableBkUpAccess();
+ 
+    // Disable LSI and LSE clocks
+    RCC_OscInitTypeDef RCC_OscInitStruct;
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI | RCC_OSCILLATORTYPE_LSE;
+    RCC_OscInitStruct.PLL.PLLState   = RCC_PLL_NONE;
+    RCC_OscInitStruct.LSIState       = RCC_LSI_OFF;
+    RCC_OscInitStruct.LSEState       = RCC_LSE_OFF;
+    HAL_RCC_OscConfig(&RCC_OscInitStruct);
+#if DEVICE_RTC_LSI
+    rtc_inited = 0;
+#endif
+ 
+}
+ 
+int rtc_isenabled(void)
+{
+#if DEVICE_RTC_LSI
+    return rtc_inited;
+#else
+  if ((RTC->ISR & RTC_ISR_INITS) ==  RTC_ISR_INITS) return 1;
+  else return 0;
+#endif
+ 
+}
+ 
+
+
+
 /******************************************************************************/
 int main(void)
 {
@@ -688,7 +793,24 @@ int main(void)
   MX_USART2_UART_Init();
   
   MX_ADC1_Init();
-  if(!(RTC->ISR & RTC_ISR_INITS))MX_RTC_Init();
+  //if(!(RTC->ISR & RTC_ISR_INITS))
+  //MX_RTC_Init();
+
+  
+  //HAL_PWR_EnableBkUpAccess();
+  
+  //backupReadData = HAL_RTCEx_BKUPRead(&RtcHandle, RTC_BKP_DR1);
+  /*
+  if (backupReadData != 0x32F2)
+  {
+    rtcInit();
+
+  }
+  */
+  rtcInit();
+  //MX_RTC_Init();
+  
+  
   MX_I2C1_Init();
   //rtc_lse_error = rtc_Init();
   //if(!(*(volatile uint32_t *) (BDCR_RTCEN_BB)))__HAL_RCC_RTC_ENABLE();
@@ -802,8 +924,8 @@ int main(void)
     
     
     if(time_update_cnt == 0){
-      HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN); // RTC_FORMAT_BIN , RTC_FORMAT_BCD
-      HAL_RTC_GetDate(&hrtc, &DateToUpdate, RTC_FORMAT_BIN);
+      HAL_RTC_GetTime(&RtcHandle, &sTime, RTC_FORMAT_BIN); // RTC_FORMAT_BIN , RTC_FORMAT_BCD
+      HAL_RTC_GetDate(&RtcHandle, &DateToUpdate, RTC_FORMAT_BIN);
       time_update_cnt = 10000;
     }
         
@@ -1342,7 +1464,7 @@ __HAL_RCC_BACKUPRESET_RELEASE();
   //__HAL_RCC_LSI_DISABLE();
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
-    rtc_lse_error = 1;
+    //rtc_lse_error = 1;
     Error_Handler();
   }
   /**Initializes the CPU, AHB and APB busses clocks 
@@ -1518,6 +1640,99 @@ static void MX_I2C1_Init(void)
   * @param None
   * @retval None
   */
+
+static void rtcInit(void){
+  
+  RtcHandle.Instance = RTC; 
+  RtcHandle.Init.HourFormat = RTC_HOURFORMAT_24;
+  RtcHandle.Init.AsynchPrediv = 127;
+  RtcHandle.Init.SynchPrediv = 255;
+  RtcHandle.Init.OutPut = RTC_OUTPUT_DISABLE;
+  RtcHandle.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
+  RtcHandle.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
+  
+  if (HAL_RTC_Init(&RtcHandle) != HAL_OK)
+  {
+    /* Initialization Error */
+    Error_Handler();
+    rtc_lse_error = 1;
+  }
+
+  /*##-2- Check if Data stored in BackUp register1: No Need to reconfigure RTC#*/
+  /* Read the Back Up Register 1 Data */
+  HAL_PWR_EnableBkUpAccess();
+  //HAL_PWR_DisableBkUpAccess();
+  __HAL_RTC_WRITEPROTECTION_DISABLE(&RtcHandle);
+  //HAL_RTCEx_BKUPWrite(&RtcHandle, RTC_BKP_DR1, 0x32F2);
+  backupReadData = HAL_RTCEx_BKUPRead(&RtcHandle, RTC_BKP_DR1);
+  if (backupReadData != 0x32F2)
+  {
+    /* Configure RTC Calendar */
+    calendarInit();
+  }
+else __HAL_RCC_CLEAR_RESET_FLAGS();  
+
+  HAL_PWR_EnableBkUpAccess();
+  //HAL_RTCEx_DeactivateTamper(&RtcHandle, RTC_TAMPER_1);
+  //__HAL_RTC_TAMPER_CLEAR_FLAG(&RtcHandle, RTC_FLAG_TAMP1F);   
+   
+  //HAL_PWR_EnableBkUpAccess();
+  HAL_RTCEx_BKUPWrite(&RtcHandle, RTC_BKP_DR2, 0x32F2);  
+  //__HAL_RTC_WRITEPROTECTION_ENABLE(&RtcHandle); 
+  
+  HAL_PWR_DisableBkUpAccess();
+  test_point = HAL_RTCEx_BKUPRead(&RtcHandle, RTC_BKP_DR2);
+
+}
+static void calendarInit(void){
+  RTC_DateTypeDef sdatestructure;
+  RTC_TimeTypeDef stimestructure;
+  //__HAL_RCC_BACKUPRESET_FORCE();
+  //__HAL_RCC_BACKUPRESET_RELEASE();
+  
+  __HAL_RTC_WRITEPROTECTION_DISABLE(&RtcHandle);
+  /*##-1- Configure the Date #################################################*/
+  /* Set Date: Tuesday February 18th 2014 */
+  /*
+  sdatestructure.Year = 0x20;
+  sdatestructure.Month = RTC_MONTH_APRIL;
+  sdatestructure.Date = 0x20;
+  sdatestructure.WeekDay = RTC_WEEKDAY_MONDAY;
+  
+  if(HAL_RTC_SetDate(&RtcHandle,&sdatestructure,RTC_FORMAT_BCD) != HAL_OK)
+  {
+
+    Error_Handler();
+  }
+*/
+  /*##-2- Configure the Time #################################################*/
+  /* Set Time: 02:00:00 */
+  
+
+  
+  stimestructure.Hours = 0x20;
+  stimestructure.Minutes = 0x32;
+  stimestructure.Seconds = 0x00;
+  stimestructure.TimeFormat = RTC_HOURFORMAT_24;
+  stimestructure.DayLightSaving = RTC_DAYLIGHTSAVING_NONE ;
+  stimestructure.StoreOperation = RTC_STOREOPERATION_RESET;
+
+  if (HAL_RTC_SetTime(&RtcHandle, &stimestructure, RTC_FORMAT_BCD) != HAL_OK)
+  {
+    /* Initialization Error */
+    Error_Handler();
+  }
+  HAL_PWR_EnableBkUpAccess();
+  //HAL_RTCEx_DeactivateTamper(&RtcHandle, RTC_TAMPER_1);
+  //__HAL_RTC_TAMPER_CLEAR_FLAG(&RtcHandle, RTC_FLAG_TAMP1F);   
+   
+  //HAL_PWR_EnableBkUpAccess();
+  HAL_RTCEx_BKUPWrite(&RtcHandle, RTC_BKP_DR1, 0x32F2);  
+  //__HAL_RTC_WRITEPROTECTION_ENABLE(&RtcHandle); 
+  HAL_RTCEx_EnableBypassShadow(&RtcHandle);
+  HAL_PWR_DisableBkUpAccess();
+}
+
 static void MX_RTC_Init(void)
 {
 
@@ -1532,17 +1747,36 @@ static void MX_RTC_Init(void)
   /* USER CODE END RTC_Init 1 */
   /**Initialize RTC Only 
   */
-  
-//if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1) != 0x32F2){  
-  //__HAL_RTC_WRITEPROTECTION_DISABLE(&hrtc);
- 
-  RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+  HAL_RTCEx_DeactivateTamper(&hrtc, RTC_TAMPER_1);
+  __HAL_RTC_TAMPER_CLEAR_FLAG(&hrtc, RTC_FLAG_TAMP1F);   
+  //__HAL_RTC_WRITEPROTECTION_DISABLE(&hrtc); 
   HAL_PWR_EnableBkUpAccess();
+  //HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR0, 0x32F2);
+  backupReadData = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1); 
   
-  __HAL_RCC_RTC_DISABLE();
-    __HAL_RCC_BACKUPRESET_FORCE();
-    __HAL_RCC_BACKUPRESET_RELEASE(); 
-    
+if (backupReadData != 0x32F2){  
+  __HAL_RTC_WRITEPROTECTION_DISABLE(&hrtc);
+  
+  RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+
+  //__HAL_RTC_WRITEPROTECTION_ENABLE(&hrtc);  
+  //__HAL_RCC_RTC_DISABLE();
+  //__HAL_RCC_BACKUPRESET_FORCE();
+  //__HAL_RCC_BACKUPRESET_RELEASE(); 
+  //HAL_PWR_EnableBkUpAccess();
+  
+    // Enable Power clock
+    //__HAL_RCC_PWR_CLK_ENABLE();
+ 
+    // Enable access to Backup domain
+    //HAL_PWR_EnableBkUpAccess();
+ 
+    // Reset Backup domain
+    //__HAL_RCC_BACKUPRESET_FORCE();
+    //__HAL_RCC_BACKUPRESET_RELEASE();
+ 
+    // Disable access to Backup domain
+    //HAL_PWR_DisableBkUpAccess();   
     
   //__HAL_RCC_BKP_CLK_ENABLE();
   
@@ -1553,14 +1787,14 @@ static void MX_RTC_Init(void)
   while (!(RCC->BDCR & RCC_BDCR_LSEON)){} 
   //Выбираем LSE в качестве источника (кварц 32768) 
   RCC->BDCR |= RCC_BDCR_RTCSEL_0;
-  //RCC->BDCR |= RCC_BDCR_LSCOSEL;
-  //RCC->BDCR &= ~RCC_BDCR_RTCSEL_1;
+  RCC->BDCR |= RCC_BDCR_LSCOSEL;
+  RCC->BDCR &= ~RCC_BDCR_RTCSEL_1;
   //Включаем тактирование RTC
   RCC->BDCR |= RCC_BDCR_RTCEN; 
   HAL_RTC_WaitForSynchro(&hrtc);
-  //__HAL_RCC_RTC_ENABLE();
-  //HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, 0x32F2);
-  //__HAL_RTC_WRITEPROTECTION_ENABLE(&hrtc);
+  
+  __HAL_RCC_RTC_ENABLE();
+
 //}
   
   hrtc.Instance = RTC;
@@ -1577,6 +1811,7 @@ static void MX_RTC_Init(void)
   }
   /**Enable the RTC Tamper 1 
   */
+  /*
   sTamper.Tamper = RTC_TAMPER_1;
   sTamper.Trigger = RTC_TAMPERTRIGGER_RISINGEDGE;
   sTamper.NoErase = RTC_TAMPER_ERASE_BACKUP_DISABLE;
@@ -1589,7 +1824,7 @@ static void MX_RTC_Init(void)
   if (HAL_RTCEx_SetTamper(&hrtc, &sTamper) != HAL_OK)
   {
     Error_Handler();
-  }
+  }*/
   /**Enable the reference Clock input 
   */
   if (HAL_RTCEx_SetRefClock(&hrtc) != HAL_OK)
@@ -1598,13 +1833,22 @@ static void MX_RTC_Init(void)
   }
   /* USER CODE BEGIN RTC_Init 2 */
   hrtc.State = HAL_RTC_STATE_READY;
-  //HAL_RTCEx_EnableBypassShadow(&hrtc);
-  HAL_PWR_DisableBkUpAccess();
+  HAL_RTCEx_EnableBypassShadow(&hrtc);
+  //HAL_PWR_DisableBkUpAccess();
   //HAL_RTCEx_DisableBypassShadow(&hrtc);
   /* USER CODE END RTC_Init 2 */
 		//Проверяем тикают ли часики
                 //if(RTC->ISR & RTC_ISR_INITS) return;
+HAL_RTCEx_DeactivateTamper(&hrtc, RTC_TAMPER_1);
+__HAL_RTC_TAMPER_CLEAR_FLAG(&hrtc, RTC_FLAG_TAMP1F);  
 
+  __HAL_RTC_WRITEPROTECTION_DISABLE(&hrtc); 
+  HAL_PWR_EnableBkUpAccess();
+  HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, 0x32F2);
+  //backupReadData = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR0); 
+  //__HAL_RTC_WRITEPROTECTION_ENABLE(&hrtc);
+  
+}
 }
 
 /**
@@ -1822,7 +2066,7 @@ static void MX_GPIO_Init(void)
 uint8_t rtc_Init(void)                                                                     // Инициализация модуля
   {
     uint8_t returned = 0;
-    if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1) != 0x32F2){ 
+    if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR0) != 0x32F2){ 
 //{
 //RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR, ENABLE);
 //PWR_BackupAccessCmd(ENABLE);
@@ -1885,7 +2129,7 @@ uint8_t rtc_Init(void)                                                          
   RTC->CR |= RTC_CR_ALRAE;
   RTC->CR |= RTC_CR_ALRAIE;
   RTC->WPR = 0xFF;                                                                      // Close access to RTC
-  HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, 0x32F2);
+  HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2, 0x32F2);
 //}
   
     }
