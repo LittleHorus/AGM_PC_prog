@@ -609,7 +609,7 @@ for(uint8_t idisp = 0; idisp < 16; idisp++){
       display_status_picts[idisp + 80] = null_pict[idisp + 16];
       display_status_picts[idisp + 208] = null_pict[idisp];
     }
-    if(oled_icon_blink_state != 0){
+    if(oled_icon_blink_state == 1){
       display_status_picts[idisp + 80] = gps_enable_pict[idisp + 16];
       display_status_picts[idisp + 208] = gps_enable_pict[idisp];       
     }
