@@ -916,6 +916,45 @@ class CommonWindow(QtWidgets.QWidget):
 			print("read block error")
 
 		self.data_processing(parse_byte_list)	
+	def read_mcu_rawdata(self):
+		data_to_plotting = list()
+		parse_byte_list = list()
+
+
+		try:
+			self.ser.write(bytearray.fromhex('7f aa 01 08 00'))
+			time.sleep(0.1)
+			self.ser.read(66)
+		except:
+			pass
+		
+		self.usb_order_cnt += 1
+		self.ser.write(bytearray.fromhex('7f aa 01 08 01 {:02X}'.format(self.usb_order_cnt)))
+		time.sleep(0.1)
+		cmdDataIn = self.ser.read(66)
+		print(cmdDataIn)
+		bytes_cnt = 2*int.from_bytes(cmdDataIn[6:10], byteorder='big', signed = False)
+
+		#40 byte per packet
+		packetCnt = bytes_cnt / 40
+		barInc = 100/packetCnt
+
+
+		print(bytes_cnt, packetCnt, barInc)
+		self.bar.setValue(1)
+		try:
+			for i in range(int(packetCnt)):
+				self.ser.write(bytearray.fromhex('7f aa 01 08 01 {:02X}'.format(self.usb_order_cnt)))
+				time.sleep(0.1)
+				din = self.ser.read(66)
+				parse_byte_list.extend(din[6:46])
+				self.bar.setValue((i+1)*barInc)
+			print(len(parse_byte_list))
+			print(parse_byte_list)	
+		except:
+			print("read block error")
+		
+		#self.data_processing(parse_byte_list)	
 
 	def on_meas_completed(self):
 		self.btn_load.setDisabled(False)
