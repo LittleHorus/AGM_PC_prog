@@ -263,10 +263,18 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_notch_open_window.setMaximumSize(horizontal_size,vertical_size)
 		self.btn_notch_open_window.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
 
+		self.btn_gsm_open_window = QtWidgets.QPushButton("GSM")
+		self.btn_gsm_open_window.setMaximumSize(horizontal_size,vertical_size)
+		self.btn_gsm_open_window.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
+
+
 		self.grid = QtWidgets.QGridLayout()
 		self.grid_2 = QtWidgets.QGridLayout()
 		self.grid_plot_labels = QtWidgets.QGridLayout()
-		
+
+		self.btn_download_raw = QtWidgets.QPushButton("Download\n Raw")
+		self.btn_download_raw.setMaximumSize(horizontal_size,vertical_size)
+		self.btn_download_raw.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)		
 		
 		self.grid.addWidget(self.label_visa_connect, 0, 0)
 		self.grid.addWidget(self.comport_combo, 0, 1)
@@ -286,9 +294,12 @@ class CommonWindow(QtWidgets.QWidget):
 		self.grid.addWidget(self.btn_clear_table, 5, 1)
 		self.grid.addWidget(self.btn_load_file, 5,0)
 
+		self.grid.addWidget(self.btn_download_raw, 6,0)
+
 		#self.grid.addWidget(self.label_set_potentiometr, 6,0,1,1)
 		#self.grid.addWidget(self.btn_set_potentiometr, 6,1,1,1)
 		self.grid.addWidget(self.btn_notch_open_window, 6,2,1,1)
+		self.grid.addWidget(self.btn_gsm_open_window, 6,3,1,1)
 			
 		#self.grid_plot_labels.addWidget(self.label_cord, 0, 0)
 		self.grid_plot_labels.addWidget(self.btn_cord_fixed, 0,0)
@@ -376,6 +387,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_load.setDisabled(True)
 		self.btn_save.setDisabled(True)
 		self.btn_clear.setDisabled(True)
+		self.btn_download_raw.setDisabled(True)
 		self.agm_serial_number.setDisabled(True)
 		self.agm_filterbox.setDisabled(True)
 		self.agm_utc.setDisabled(True)
@@ -404,6 +416,10 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_clear.clicked.connect(self.on_clear)
 
 		self.pwindow = paramWindow()
+		self.gsmwindow = paramWindow_GSM()
+
+		self.gsmwindow.btn_gsm_apply.clicked.connect(self.on_gsm_apply)
+		self.btn_gsm_open_window.clicked.connect(self.on_gsm_open_window)
 		self.btn_notch_open_window.clicked.connect(self.on_open_notch_window)
 
 		self.pwindow.btn_notch_apply.clicked.connect(self.on_apply_notch_settings)
@@ -417,7 +433,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_filterbox.activated.connect(self.on_change_notch_filter)
 		self.agm_utc.activated.connect(self.on_change_utc_timezone)
 		#self.comport_combo.activated.connect(self.on_activated_com_list)
-
+		self.btn_download_raw.clicked.connect(self.on_download_raw)
 		self.proxy = pg.SignalProxy(self.graph.scene().sigMouseMoved, rateLimit=60, slot=self.mouseMoved)
 		#self.curve.sigClicked.connect(self.clicked_point)
 		#self.curve.sigPointsClicked.connect(self.clicked_point)
@@ -430,6 +446,12 @@ class CommonWindow(QtWidgets.QWidget):
 		except:
 			print("apply notch settings error")
 
+	def on_gsm_apply(self):
+		self.gsmwindow.close()
+
+	def on_gsm_open_window(self):
+		self.gsmwindow.resize(200,100)
+		self.gsmwindow.setWindowTitle("GSM Settings")	
 	def on_open_notch_window(self):
 		self.pwindow.resize(200,100)
 		self.pwindow.setWindowTitle("Notch Filter")
@@ -565,6 +587,7 @@ class CommonWindow(QtWidgets.QWidget):
 			self.agm_filterbox.setDisabled(False)
 			self.agm_utc.setDisabled(False)
 			self.btn_notch_open_window.setDisabled(False)
+			self.btn_download_raw.setDisabled(False)
 		except IOError:
 			#pass
 			print("Port already open another programm")
@@ -607,6 +630,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_filterbox.setDisabled(True)
 		self.agm_utc.setDisabled(True)	
 		self.btn_notch_open_window.setDisabled(True)
+		self.btn_download_raw.setDisabled(True)
 		try:	
 			self.ser.close()
 		except:
@@ -812,6 +836,10 @@ class CommonWindow(QtWidgets.QWidget):
 
 		except Exception:
 			traceback.print_exc()
+	def on_download_raw(self):
+		print("1")
+		self.read_mcu_rawdata()
+		#btn_download_raw
 
 	def on_load_from_file(self):
 		fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')[0]
@@ -937,7 +965,7 @@ class CommonWindow(QtWidgets.QWidget):
 
 		#40 byte per packet
 		packetCnt = bytes_cnt / 40
-		barInc = 100/packetCnt
+		barInc = (100/packetCnt)+1
 
 
 		print(bytes_cnt, packetCnt, barInc)
@@ -947,12 +975,29 @@ class CommonWindow(QtWidgets.QWidget):
 				self.ser.write(bytearray.fromhex('7f aa 01 08 01 {:02X}'.format(self.usb_order_cnt)))
 				time.sleep(0.1)
 				din = self.ser.read(66)
-				parse_byte_list.extend(din[6:46])
+				parse_byte_list.extend(din[6:66])
 				self.bar.setValue((i+1)*barInc)
+				print(din)
 			print(len(parse_byte_list))
 			print(parse_byte_list)	
 		except:
 			print("read block error")
+
+		name = strftime("%Y-%m-%d_%Hh%Mm%Ss", gmtime())
+
+		dict_to_save = {'data':parse_byte_list}
+
+		dict_filename = "{}\\agm_{}.npy".format(os.path.dirname(os.path.abspath(__file__)),name)
+		filename = "{}\\agm_{}.dat".format(os.path.dirname(os.path.abspath(__file__)),name)
+		try:
+			#for i in range(len(agm_data)):
+			#	np.savetxt(filename, agm_data[i], delimiter = ',')#, fmt='%x')
+				
+			np.save(dict_filename, dict_to_save)
+			print("saved")
+
+		except Exception:
+			traceback.print_exc()
 		
 		#self.data_processing(parse_byte_list)	
 
@@ -1199,7 +1244,42 @@ class paramWindow(QtWidgets.QWidget):
 		self.vbox_notch.insertStretch(2,0)
 
 		self.setLayout(self.vbox_notch)
+
+
+class paramWindow_GSM(QtWidgets.QWidget):
+	def __init__(self, parent = None):
+		QtGui.QWidget.__init__(self, parent)
+		self.title_label = QtWidgets.QLabel("GSM settings")
+		self.title_label.setAlignment(QtCore.Qt.AlignHCenter)
+		self.validInt = QtGui.QIntValidator(1,255)
 		
+		self.gsm_mobile_number = QtWidgets.QLabel("mobile number:")
+		self.gsm_mobile_number.setAlignment(QtCore.Qt.AlignHCenter)
+		self.gsm_mobile_number.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+		
+
+		self.mobilenumberstring = QtWidgets.QLineEdit("+70000000000")
+		self.mobilenumberstring.setMaximumSize(200,50)
+		self.mobilenumberstring.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+		#self.mobilenumberstring.setValidator(self.validInt)
+		self.mobilenumberstring.setAlignment(QtCore.Qt.AlignCenter)
+		self.mobilenumberstring.setFont(QtGui.QFont('Arial', 13))  
+
+		self.btn_gsm_apply = QtWidgets.QPushButton("Apply")
+		self.btn_gsm_apply.setMaximumSize(100,50)
+		self.btn_gsm_apply.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+
+		self.vbox_gsm = QtWidgets.QVBoxLayout()
+		self.hbox_gsm = QtWidgets.QHBoxLayout()
+
+		self.hbox_gsm.addWidget(self.gsm_mobile_number,0)
+		self.hbox_gsm.addWidget(self.mobilenumberstring,1)
+		self.hbox_gsm.addWidget(self.btn_gsm_apply,2)
+		self.hbox_gsm.addWidget(QtWidgets.QLabel(""),3)
+
+		self.hbox_gsm.insertStretch(4,0)
+
+		self.setLayout(self.hbox_gsm)		
 		
 			
 		
