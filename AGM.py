@@ -24,15 +24,23 @@ __version__ = '0.3beta'
 
 class CommonWindow(QtWidgets.QWidget):
 	"""Класс основного окна программы"""
-	
+	#QMainWindow
+	#QtWidgets.QWidget
 	def __init__(self, parent = None):
 		QtWidgets.QMainWindow.__init__(self, parent)
 
 		#widget = QtWidgets.QWidget(self)
 		#self.setCentralWidget(widget)
+		#statusbar = QtWidgets.QStatusBar(self)
+		#statusbar.addPermanentWidget(self.widget('progress_bar'))
+		#statusbar.addPermanentWidget(QtWidgets.QWidget())
+		#statusbar.setSizeGripEnabled(False)
+		#self.setStatusBar(statusbar) 
+
+
 		self.external_ip = get('https://api.ipify.org').text
 		print('{}'.format(self.external_ip))
-		self.ip_address = socket.gethostbyname_ex(socket.gethostname())
+		self.ip_address = socket.gethostbyname(socket.gethostname())
 		print(self.ip_address)
 		self.tcp_server_port = 7777
 		self.data = [0]#test data value for plot
@@ -1335,7 +1343,6 @@ class paramWindow_GSM(QtWidgets.QWidget):
 		self.gsm_mobile_number.setAlignment(QtCore.Qt.AlignHCenter)
 		self.gsm_mobile_number.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 		
-
 		self.mobilenumberstring = QtWidgets.QLineEdit("+70000000000")
 		self.mobilenumberstring.setMaximumSize(200,50)
 		self.mobilenumberstring.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
@@ -1362,7 +1369,7 @@ class paramWindow_GSM(QtWidgets.QWidget):
 class paramWindow_TCP(QtWidgets.QWidget):
 	def __init__(self, ipext, parent = None,):
 		QtGui.QWidget.__init__(self, parent)
-		self.setFixedSize(300, 100)
+		self.setFixedSize(300, 600)
 		self.title_label = QtWidgets.QLabel("TCP settings")
 		self.title_label.setAlignment(QtCore.Qt.AlignHCenter)
 		self.validInt = QtGui.QIntValidator(1,255)
@@ -1370,7 +1377,7 @@ class paramWindow_TCP(QtWidgets.QWidget):
 		self.listen_port = QtWidgets.QLabel("PORT:    ")
 		self.listen_port.setAlignment(QtCore.Qt.AlignHCenter)
 		self.listen_port.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
-		
+		self.tcp_client_data = "input data to server"
 		self.listen_port_string = QtWidgets.QLineEdit("7777")
 		self.listen_port_string.setMaximumSize(200,50)
 		self.listen_port_string.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
@@ -1393,7 +1400,19 @@ class paramWindow_TCP(QtWidgets.QWidget):
 		self.btn_tcp_apply.setMaximumSize(100,50)
 		self.btn_tcp_apply.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 
+		self.tcp_logger_label = QtWidgets.QLabel("Log:")
+		self.tcp_logger_label.setAlignment(QtCore.Qt.AlignHCenter)
+		self.tcp_logger_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+
+		w = QtWidgets.QWidget()
+		w.resize(300, 500)
+		self.textBox = QtWidgets.QPlainTextEdit(w)
+		self.textBox.insertPlainText(self.tcp_client_data)
+		self.textBox.setReadOnly(True)
+		w.show()
+
 		self.vbox_level1_tcp = QtWidgets.QVBoxLayout()
+		self.vbox_level2_tcp = QtWidgets.QVBoxLayout()#for data logger
 		self.hbox_level1_tcp = QtWidgets.QHBoxLayout()
 		self.hbox_level2_tcp = QtWidgets.QHBoxLayout()
 		self.hbox_level3_tcp = QtWidgets.QHBoxLayout()
@@ -1412,8 +1431,10 @@ class paramWindow_TCP(QtWidgets.QWidget):
 		self.vbox_level1_tcp.insertLayout(1,self.hbox_level2_tcp)
 		self.hbox_level3_tcp.insertLayout(0,self.vbox_level1_tcp)
 		self.hbox_level3_tcp.addWidget(self.btn_tcp_apply,1)
-
-		self.setLayout(self.hbox_level3_tcp)		
+		self.vbox_level2_tcp.insertLayout(0, self.hbox_level3_tcp)
+		self.vbox_level2_tcp.addWidget(self.tcp_logger_label,1)
+		self.vbox_level2_tcp.addWidget(self.textBox,2)
+		self.setLayout(self.vbox_level2_tcp)		
 		
 						
 		
