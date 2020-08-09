@@ -276,6 +276,9 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_gsm_open_window.setMaximumSize(horizontal_size,vertical_size)
 		self.btn_gsm_open_window.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
 
+		self.btn_tcp_open_window = QtWidgets.QPushButton("TCP")
+		self.btn_tcp_open_window.setMaximumSize(horizontal_size,vertical_size)
+		self.btn_tcp_open_window.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
 
 		self.grid = QtWidgets.QGridLayout()
 		self.grid_2 = QtWidgets.QGridLayout()
@@ -307,6 +310,7 @@ class CommonWindow(QtWidgets.QWidget):
 
 		#self.grid.addWidget(self.label_set_potentiometr, 6,0,1,1)
 		#self.grid.addWidget(self.btn_set_potentiometr, 6,1,1,1)
+		self.grid.addWidget(self.btn_tcp_open_window, 6, 1, 1, 1)
 		self.grid.addWidget(self.btn_notch_open_window, 6,2,1,1)
 		self.grid.addWidget(self.btn_gsm_open_window, 6,3,1,1)
 			
@@ -402,6 +406,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_utc.setDisabled(True)
 		self.btn_notch_open_window.setDisabled(True)
 		self.meas_thread = evThread()
+		self.tcp_server_thread = tcpThread()
 
 		self.btn_visa_connect.clicked.connect(self.on_connected)
 		self.btn_visa_connect.clicked.connect(self.on_get_current_path)
@@ -426,8 +431,11 @@ class CommonWindow(QtWidgets.QWidget):
 
 		self.pwindow = paramWindow()
 		self.gsmwindow = paramWindow_GSM()
-
+		self.tcpwindow = paramWindow_TCP(self.external_ip)
 		self.gsmwindow.btn_gsm_apply.clicked.connect(self.on_gsm_apply)
+		self.tcpwindow.btn_tcp_apply.clicked.connect(self.on_tcp_apply)
+
+		self.btn_tcp_open_window.clicked.connect(self.on_tcp_open_window)
 		self.btn_gsm_open_window.clicked.connect(self.on_gsm_open_window)
 		self.btn_notch_open_window.clicked.connect(self.on_open_notch_window)
 
@@ -457,7 +465,12 @@ class CommonWindow(QtWidgets.QWidget):
 
 	def on_gsm_apply(self):
 		self.gsmwindow.close()
-
+	def on_tcp_apply(self):
+		self.tcpwindow.close()
+	def on_tcp_open_window(self):
+		self.tcpwindow.resize(200,100)
+		self.tcpwindow.setWindowTitle("TCP Settings")	
+		self.tcpwindow.show()		
 	def on_gsm_open_window(self):
 		self.gsmwindow.resize(200,100)
 		self.gsmwindow.setWindowTitle("GSM Settings")	
@@ -1347,17 +1360,17 @@ class paramWindow_GSM(QtWidgets.QWidget):
 		self.setLayout(self.hbox_gsm)		
 		
 class paramWindow_TCP(QtWidgets.QWidget):
-	def __init__(self, parent = None):
+	def __init__(self, ipext, parent = None,):
 		QtGui.QWidget.__init__(self, parent)
+		self.setFixedSize(300, 100)
 		self.title_label = QtWidgets.QLabel("TCP settings")
 		self.title_label.setAlignment(QtCore.Qt.AlignHCenter)
 		self.validInt = QtGui.QIntValidator(1,255)
-		
-		self.listen_port = QtWidgets.QLabel("Port:")
+		self.ext_ip = ipext
+		self.listen_port = QtWidgets.QLabel("PORT:    ")
 		self.listen_port.setAlignment(QtCore.Qt.AlignHCenter)
 		self.listen_port.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 		
-
 		self.listen_port_string = QtWidgets.QLineEdit("7777")
 		self.listen_port_string.setMaximumSize(200,50)
 		self.listen_port_string.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
@@ -1365,21 +1378,42 @@ class paramWindow_TCP(QtWidgets.QWidget):
 		self.listen_port_string.setAlignment(QtCore.Qt.AlignCenter)
 		self.listen_port_string.setFont(QtGui.QFont('Arial', 13))  
 
+		self.ip_address_label = QtWidgets.QLabel("HOST IP:")
+		self.ip_address_label.setAlignment(QtCore.Qt.AlignHCenter)
+		self.ip_address_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+		
+		self.ip_address_string = QtWidgets.QLineEdit("{}".format(self.ext_ip))
+		self.ip_address_string.setMaximumSize(200,50)
+		self.ip_address_string.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+		#self.ip_address_string.setValidator(self.validInt)
+		self.ip_address_string.setAlignment(QtCore.Qt.AlignCenter)
+		self.ip_address_string.setFont(QtGui.QFont('Arial', 13))  
+
 		self.btn_tcp_apply = QtWidgets.QPushButton("Apply")
 		self.btn_tcp_apply.setMaximumSize(100,50)
 		self.btn_tcp_apply.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 
-		self.vbox_tcp = QtWidgets.QVBoxLayout()
-		self.hbox_tcp = QtWidgets.QHBoxLayout()
+		self.vbox_level1_tcp = QtWidgets.QVBoxLayout()
+		self.hbox_level1_tcp = QtWidgets.QHBoxLayout()
+		self.hbox_level2_tcp = QtWidgets.QHBoxLayout()
+		self.hbox_level3_tcp = QtWidgets.QHBoxLayout()
 
-		self.hbox_tcp.addWidget(self.listen_port,0)
-		self.hbox_tcp.addWidget(self.listen_port_string,1)
-		self.hbox_tcp.addWidget(self.btn_tcp_apply,2)
-		self.hbox_tcp.addWidget(QtWidgets.QLabel(""),3)
+		self.hbox_level1_tcp.addWidget(self.listen_port,0)
+		self.hbox_level1_tcp.addWidget(self.listen_port_string,1)
+		self.hbox_level1_tcp.addWidget(QtWidgets.QLabel(""),2)
+		self.hbox_level1_tcp.insertStretch(3,0)
 
-		self.hbox_tcp.insertStretch(4,0)
+		self.hbox_level2_tcp.addWidget(self.ip_address_label,0)
+		self.hbox_level2_tcp.addWidget(self.ip_address_string,1)
+		self.hbox_level2_tcp.addWidget(QtWidgets.QLabel(""),2)
+		self.hbox_level2_tcp.insertStretch(4,0)
 
-		self.setLayout(self.hbox_tcp)		
+		self.vbox_level1_tcp.insertLayout(0,self.hbox_level1_tcp)
+		self.vbox_level1_tcp.insertLayout(1,self.hbox_level2_tcp)
+		self.hbox_level3_tcp.insertLayout(0,self.vbox_level1_tcp)
+		self.hbox_level3_tcp.addWidget(self.btn_tcp_apply,1)
+
+		self.setLayout(self.hbox_level3_tcp)		
 		
 						
 		
