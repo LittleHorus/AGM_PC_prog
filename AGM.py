@@ -14,6 +14,11 @@ import time
 import traceback
 from pyqtgraph.Qt import QtGui, QtCore
 from pyqtgraph.Point import Point
+import socket
+import sys
+from requests import get
+import bluetooth
+
 
 __version__ = '0.3beta'
 
@@ -25,7 +30,11 @@ class CommonWindow(QtWidgets.QWidget):
 
 		#widget = QtWidgets.QWidget(self)
 		#self.setCentralWidget(widget)
-
+		self.external_ip = get('https://api.ipify.org').text
+		print('{}'.format(self.external_ip))
+		self.ip_address = socket.gethostbyname_ex(socket.gethostname())
+		print(self.ip_address)
+		self.tcp_server_port = 7777
 		self.data = [0]#test data value for plot
 		self.parsed_data_list = list()
 		self.records_header_list = list()
@@ -452,11 +461,10 @@ class CommonWindow(QtWidgets.QWidget):
 	def on_gsm_open_window(self):
 		self.gsmwindow.resize(200,100)
 		self.gsmwindow.setWindowTitle("GSM Settings")	
+		self.gsmwindow.show()
 	def on_open_notch_window(self):
 		self.pwindow.resize(200,100)
 		self.pwindow.setWindowTitle("Notch Filter")
-
-
 		self.pwindow.show()
 	def on_notch_type_changed(self):
 		if self.pwindow.notch_type_box.currentIndex() == 0:
@@ -1143,6 +1151,44 @@ class CommonWindow(QtWidgets.QWidget):
 			self.hLine.setPos(self.parsed_data_list[self.current_row][self.xpos])
 		except:
 			pass#print("x pos out of range")
+	def tcp_server_init(self):
+		tcp_server_address = (self.external_ip, self.tcp_server_port)
+
+		self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.server_socket.bind(tcp_server_address)
+		self.server_socket.listen(1)
+
+		self.connection, self.client_address = self.server_socket.accept()
+		print("new connection from {}".format(self.client_address))
+
+
+	def tcp_server_read_data(self):
+		try:
+			data = self.connection.recv(1024)
+			print(str(data))
+			return (data)
+		except:
+			print("tcp read data from client {} error".format(self.client_address))
+			return 0
+		
+	def tcp_server_close(self):
+		try:
+			self.connection.close()
+			print("tcp server client {} connection closed".format(self.client_address))
+		except:
+			print("tcp server close connection error")
+	def on_send_sms(self):
+		try:
+			#on_send_cmd_sms_send()
+			pass
+		except:
+			print("send cmd error")
+	def bluetooth_init(self):
+		nearby_devices = bluetooth.discover_devices(lookup_names=True)
+		print("Found {} devices.".format(len(nearby_devices)))
+
+		for addr, name in nearby_devices:
+			print("  {} - {}".format(addr, name))		
 
 
 class evThread(QtCore.QThread):
@@ -1166,7 +1212,26 @@ class evThread(QtCore.QThread):
 				
 		if self.running == False:
 			self.status_signal.emit("Interrupted")
-			
+class tcpThread(QtCore.QThread):
+	
+	status_signal = QtCore.pyqtSignal(str)
+	data = QtCore.pyqtSignal(np.ndarray)
+	progress = QtCore.pyqtSignal(int)
+	def __init__(self, parent = None):
+		QtCore.QThread.__init__(self,parent)
+		self.running = False
+		
+	def run(self):
+		self.running = True
+		for i in range(25):
+			if self.running == True:
+				#self.sleep(1)
+				self.status_signal.emit("{} / {}".format(i+1,100))
+				self.dataplot.emit(np.random.randn(200,))
+				self.progress.emit(4*i+4)
+				
+		if self.running == False:
+			self.status_signal.emit("Interrupted")			
 class ppData:
 	"""this class will be used for post processing of data"""
 	def __init__(self, parent = None):
@@ -1281,7 +1346,42 @@ class paramWindow_GSM(QtWidgets.QWidget):
 
 		self.setLayout(self.hbox_gsm)		
 		
-			
+class paramWindow_TCP(QtWidgets.QWidget):
+	def __init__(self, parent = None):
+		QtGui.QWidget.__init__(self, parent)
+		self.title_label = QtWidgets.QLabel("TCP settings")
+		self.title_label.setAlignment(QtCore.Qt.AlignHCenter)
+		self.validInt = QtGui.QIntValidator(1,255)
+		
+		self.listen_port = QtWidgets.QLabel("Port:")
+		self.listen_port.setAlignment(QtCore.Qt.AlignHCenter)
+		self.listen_port.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+		
+
+		self.listen_port_string = QtWidgets.QLineEdit("7777")
+		self.listen_port_string.setMaximumSize(200,50)
+		self.listen_port_string.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+		#self.listen_port_string.setValidator(self.validInt)
+		self.listen_port_string.setAlignment(QtCore.Qt.AlignCenter)
+		self.listen_port_string.setFont(QtGui.QFont('Arial', 13))  
+
+		self.btn_tcp_apply = QtWidgets.QPushButton("Apply")
+		self.btn_tcp_apply.setMaximumSize(100,50)
+		self.btn_tcp_apply.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+
+		self.vbox_tcp = QtWidgets.QVBoxLayout()
+		self.hbox_tcp = QtWidgets.QHBoxLayout()
+
+		self.hbox_tcp.addWidget(self.listen_port,0)
+		self.hbox_tcp.addWidget(self.listen_port_string,1)
+		self.hbox_tcp.addWidget(self.btn_tcp_apply,2)
+		self.hbox_tcp.addWidget(QtWidgets.QLabel(""),3)
+
+		self.hbox_tcp.insertStretch(4,0)
+
+		self.setLayout(self.hbox_tcp)		
+		
+						
 		
 def serial_ports():
 	""" Lists serial port names
