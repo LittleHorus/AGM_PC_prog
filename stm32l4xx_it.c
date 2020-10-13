@@ -74,6 +74,7 @@ uint8_t main_menu_string_state = 0;
 uint8_t uart_rx_counter = 0;
 extern uint8_t receiveBuffer[200];
 extern struct device_status_struct agm;
+extern struct option_menu agm_option_menu;
 uint8_t screen_type = 0;
 uint8_t gain_update = 0;
 extern uint16_t blink_active_param;
@@ -154,9 +155,38 @@ struct gps_status_struct{
  uint8_t utc_date_year;
   
 }extern agm_gps_status;
+struct lpfStruct{
+  uint32_t dout;
+  uint16_t dout_prev;
+  float coef_k;
+  uint16_t din;
+  uint8_t error_cnt;
+  
+}extern lpfData;
 
+extern uint8_t cor_done;
 extern uint32_t record_length_enough_cnt;
 extern uint8_t record_length_enough;
+
+extern uint16_t covarDataMonitorArr[100];
+extern uint8_t cdma_cnt;
+extern int32_t covarCoefArr[100];
+extern uint8_t cca_cnt;
+extern uint16_t lpfArray[40], lpfClearDataArray[40];
+extern uint8_t lpfArrayHead, lpfClearDataArrayHead;
+extern uint16_t covar_buffer[11], lf_data_buffer[30];
+extern uint8_t covar_buffer_enough, covar_buffer_head, ld_data_buffer_head, covar_in_buffer_counter, covar_buffer_result_head;
+extern int32_t covar_buffer_result[40];
+
+void correlator_threshold_buffer(uint16_t data_input);	
+void covar_threshold_buffer(uint16_t data_input);
+int32_t covar_evaluate(uint16_t arr, uint8_t offset);
+
+extern uint16_t meas_time_covar;
+extern uint8_t evaluate_start, evaluate_end;
+uint16_t meas_time_covar_cnt = 0;
+
+extern uint16_t mag_coef_param;
 
 /* USER CODE END PV */
 
@@ -426,7 +456,17 @@ void TIM7_IRQHandler(void)
     }
     if(record_start_delay_cnt == 1)record_start_delay_done = 1;
     if(record_start_delay_cnt != 0)record_start_delay_cnt--;
-    //100ms - 10Hz sample rate for mag detector
+    
+    
+ if((evaluate_start == 1)&&(evaluate_end == 0))meas_time_covar_cnt++;
+ if((evaluate_start == 0)&&(evaluate_end == 1)){
+   meas_time_covar = meas_time_covar_cnt;
+   meas_time_covar_cnt = 0;
+ }
+
+  
+    
+    //5ms sample rate for mag detector
     if(ADC1->ISR & ADC_ISR_EOC){
         
       if(adc_order == 0){
@@ -440,12 +480,55 @@ void TIM7_IRQHandler(void)
           }
         }
 
+
+        covarDataMonitorArr[cdma_cnt++] = adc_ch1;
+        if(cdma_cnt > 99) cdma_cnt = 0;
+        
         if((adc_ready == 1)&&(adc_fetch_timeout == 0)&&(agm_standby_active_mode == 0x01)){
           if(record_start_delay_done == 1){
-            threshold_buffer(adc_ch1, 100);
+            //threshold_buffer(adc_ch1, 200);
+            //correlator_threshold_buffer(adc_ch1);
+            //lpfData.dout_prev = lpf_mag(adc_ch1);
+            //threshold_buffer(lpfData.dout_prev, 100);
+            
+            //covar_threshold_buffer(adc_ch1);
+            //threshold_buffer(adc_ch1, 400);
+            
+            if(agm_option_menu.record_mode == 1)covar_threshold_buffer(adc_ch1);
+            if(agm_option_menu.record_mode == 0){
+              lpfData.dout_prev = lpf_mag(adc_ch1);
+              //lpfClearDataArray[lpfClearDataArrayHead++] = adc_ch1;
+              //if(lpfClearDataArrayHead> 35)lpfClearDataArrayHead = 0;
+              //lpfArray[lpfArrayHead++] = lpfData.dout_prev;
+              //if(lpfArrayHead > 35) lpfArrayHead = 0;
+
+              threshold_buffer(lpfData.dout_prev, mag_coef_param);
+              //threshold_buffer(adc_ch1, 400);
+
+            }
+            //correlation_func(adc_ch1);
           }
           adc_fetch_timeout = 50;//5ms
         }
+        if((adc_ready == 1)&&(adc_fetch_timeout == 0)&&(agm_standby_active_mode == 0x00)){
+          if(cor_done == 1){
+            cor_done = 0;
+            //correlation_func_standart(adc_ch1);
+            //covarCoefArr[cca_cnt++] = covar_evaluate(covarDataMonitorArr[cdma_cnt], 0);
+            //if(cca_cnt>99)cca_cnt = 0;
+            
+            lpfData.dout_prev = lpf_mag(adc_ch1);
+            lpfClearDataArray[lpfClearDataArrayHead++] = adc_ch1;
+            if(lpfClearDataArrayHead> 35)lpfClearDataArrayHead = 0;
+            lpfArray[lpfArrayHead++] = lpfData.dout_prev;
+            if(lpfArrayHead > 35) lpfArrayHead = 0;
+            
+
+            //correlation_func(adc_ch1);
+          }
+          adc_fetch_timeout = 50;//1ms sampling time for 22Hz detection, adc sampling time faster than 10usec//5ms
+          //if(mag_detect) adc_fetch_time = 50;
+        }        
         adc_ready = 1;
         
         
@@ -654,8 +737,9 @@ void TIM7_IRQHandler(void)
             data_string_1[12] = (uint8_t)0x30 + record_number%10;
             
             data_string_1[14] = (uint8_t)0x30+((card_watcher*100)/262144)/10;
+            if(data_string_1[14] > 0x39) data_string_1[14] = 0x39;
             data_string_1[15] = (uint8_t)0x30+((card_watcher*100)/262144)%10;
-            data_string_1[17] = (uint8_t)0x30+((card_watcher*1000)/262144)/10;
+            data_string_1[17] = (uint8_t)0x30+((card_watcher*1000)/262144)%10;
             data_string_1[18] = (uint8_t)0x30+((card_watcher*10000)/262144)%10;
             oled_clear_string(0);
             //oled_text(gps_oled_string, 1);

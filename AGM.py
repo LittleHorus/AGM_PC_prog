@@ -3,8 +3,11 @@
 
 
 from PyQt5 import QtWidgets, QtCore, QtGui
-from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtWidgets import QFileDialog, QWhatsThis
+from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QCompleter
+from PyQt5.QtGui import QRegExpValidator
 import pyqtgraph as pg 
 import numpy as np
 import serial
@@ -18,6 +21,7 @@ import socket
 import sys
 from requests import get
 import bluetooth
+#import qdarkstyle 
 
 
 __version__ = '0.3beta'
@@ -36,8 +40,8 @@ class CommonWindow(QtWidgets.QWidget):
 		#statusbar.addPermanentWidget(QtWidgets.QWidget())
 		#statusbar.setSizeGripEnabled(False)
 		#self.setStatusBar(statusbar) 
-
-
+		self.mobileNumber = str()
+		self.serialDeviceConnected = False
 		self.external_ip = get('https://api.ipify.org').text
 		print('{}'.format(self.external_ip))
 		self.ip_address = socket.gethostbyname(socket.gethostname())
@@ -151,6 +155,38 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_serial_number.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 		self.agm_serial_number.setValidator(self.onlyInt)
 		self.agm_serial_number.setAlignment(QtCore.Qt.AlignCenter)
+		strPath = os.path.realpath(__file__)
+		dirPath = os.path.dirname(strPath)
+		print(dirPath+'\\icon.ico')
+
+		self.agm_lf_and_mag_threshold_label = QtWidgets.QLabel("Threshold settling:")
+		self.agm_lf_and_mag_threshold_label.setMaximumSize(200,vertical_size)
+		self.agm_lf_and_mag_threshold_label.setSizePolicy(QtWidgets.QSizePolicy.Maximum,QtWidgets.QSizePolicy.Maximum)#Fixed
+
+		self.agm_lf_and_mag_threshold_line = QtWidgets.QLineEdit("100")#center frequency for nwa
+		self.agm_lf_and_mag_threshold_line.setMaximumSize(horizontal_size,vertical_size)
+		self.agm_lf_and_mag_threshold_line.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+		self.agm_lf_and_mag_threshold_line.setValidator(self.onlyInt)
+		self.agm_lf_and_mag_threshold_line.setAlignment(QtCore.Qt.AlignCenter)
+
+		self.agm_lf_and_mag_threshold_button = QtWidgets.QPushButton("Set Threshold")
+		self.agm_lf_and_mag_threshold_button.setMaximumSize(horizontal_size,vertical_size)
+		self.agm_lf_and_mag_threshold_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)#Fixed
+
+		self.agm_lf_and_mag_threshold_combobox = QtWidgets.QComboBox(self)#span for nwa
+		self.agm_lf_and_mag_threshold_combobox.addItems(["MAG", "LF"])
+		self.agm_lf_and_mag_threshold_combobox.setMaximumSize(horizontal_size,vertical_size)
+		self.agm_lf_and_mag_threshold_combobox.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+
+
+		self.btn_update_agm_id = QtWidgets.QPushButton()
+		self.btn_update_agm_id.setMaximumSize(40,vertical_size)
+		self.btn_update_agm_id.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+		try:
+			self.btn_update_agm_id.setIcon(QtGui.QIcon(dirPath+'\\Update.png'))
+			self.btn_update_agm_id.setIconSize(QtCore.QSize(24,24))
+		except:
+			pass
 		
 		self.agm_utc = QtWidgets.QComboBox(self)#span for nwa
 		self.agm_utc.addItems(["UTC+0", "UTC+1", "UTC+2", "UTC+3","UTC+4", "UTC+5","UTC+6","UTC+7","UTC+8", "UTC+9","UTC+10", "UTC+11", "UTC+12"])
@@ -217,15 +253,6 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		self.table_of_records.horizontalHeader().setStretchLastSection(False)
 		
-		#data
-		#self.table_of_records.setItem(0,0,QtWidgets.QTableWidgetItem("06.12.19"))
-		#self.table_of_records.setItem(0,1,QtWidgets.QTableWidgetItem("13:05:22"))
-		#self.table_of_records.setItem(0,2,QtWidgets.QTableWidgetItem("Mag"))
-		#self.table_of_records.setItem(0,3,QtWidgets.QTableWidgetItem("54,320N\n82,642E"))
-		#self.table_of_records.setItem(0,4,QtWidgets.QTableWidgetItem("2sec"))
-		#self.table_of_records.setItem(0,5,QtWidgets.QTableWidgetItem(""))
-
-		
 		self.table_of_records.resizeColumnsToContents()
 		self.table_of_records.setColumnWidth(0, 100)
 		self.table_of_records.setColumnWidth(1, 100)
@@ -239,13 +266,6 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.table_of_records.setRowHeight(0,40)
 		#self.table_of_records.setRowHeight(1,40)
 		#self.table_of_records.setRowHeight(2,40)
-
-		#self.agm_serial_number = QtWidgets.QLineEdit()
-		#self.form = QtWidgets.QFormLayout()
-		#self.form.addRow("Center Frequency:", self.agm_serial_number)
-		#self.form.addRow("SPAN:",self.agm_utc)
-		#self.form.addRow("NOP:",self.line_nop)
-		
 		
 		self.bar = QtWidgets.QProgressBar(self)
 		self.bar.setMaximumSize(200,20)
@@ -259,6 +279,7 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		
 		self.btn_load = QtWidgets.QPushButton("&Download")
+		#self.btn_load.setWhatsThis("Load file from PC")
 		self.btn_load.setMaximumSize(horizontal_size,vertical_size)
 		self.btn_load.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 		#self.btn_stop = QtWidgets.QPushButton("S&top")
@@ -305,6 +326,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.grid.addWidget(self.agm_utc_label, 2, 0, alignment = QtCore.Qt.AlignCenter | QtCore.Qt.AlignCenter)
 
 		self.grid.addWidget(self.agm_serial_number, 1, 1)#, alignment = QtCore.Qt.AlignCenter | QtCore.Qt.AlignCenter)
+		self.grid.addWidget(self.btn_update_agm_id,1,2)
 		self.grid.addWidget(self.agm_utc, 2, 1)
 		
 		self.grid.addWidget(self.btn_load,4,0)
@@ -346,6 +368,16 @@ class CommonWindow(QtWidgets.QWidget):
 		self.grid.addWidget(QtWidgets.QLabel(""),7,3)
 		
 		self.grid.addWidget(self.bar,8,0,1,5)
+
+		self.grid.addWidget(self.agm_lf_and_mag_threshold_label, 9,0,1,5)
+		self.grid.addWidget(self.agm_lf_and_mag_threshold_combobox, 10,0,1,1)
+		self.grid.addWidget(self.agm_lf_and_mag_threshold_line, 10,1,1,2)
+		self.grid.addWidget(self.agm_lf_and_mag_threshold_button, 10,2,1,4)
+
+		self.grid_2.addWidget(QtWidgets.QLabel(""),11,0)
+		self.grid_2.addWidget(QtWidgets.QLabel(""),11,1)
+		self.grid_2.addWidget(QtWidgets.QLabel(""),11,2)
+		self.grid_2.addWidget(QtWidgets.QLabel(""),11,3)
 		
 		#self.grid_3.addWidget(self.table_of_records,0,0)
 		#self.grid.addWidget(self.lbl_g,10,0,1,5)
@@ -410,6 +442,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_clear.setDisabled(True)
 		self.btn_download_raw.setDisabled(True)
 		self.agm_serial_number.setDisabled(True)
+		self.btn_update_agm_id.setDisabled(True)
 		self.agm_filterbox.setDisabled(True)
 		self.agm_utc.setDisabled(True)
 		self.btn_notch_open_window.setDisabled(True)
@@ -422,12 +455,11 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_save.clicked.connect(self.on_save_to_file)
 		self.btn_load_file.clicked.connect(self.on_load_from_file) 
 		self.btn_clear_table.clicked.connect(self.on_clear_table)
-		self.agm_serial_number.editingFinished.connect(self.on_change_serial_number)
-
+		#self.agm_serial_number.editingFinished.connect(self.on_change_serial_number)
 
 		#self.btn_set_potentiometr.clicked.connect(self.on_set_notch_potentiometr)
-
 		self.btn_cord_fixed.clicked.connect(self.on_captured)
+		self.btn_update_agm_id.clicked.connect(self.on_update_id)
 		self.btn_load.clicked.connect(self.on_start_load)
 		#self.meas_thread.started.connect(self.on_meas_started)
 		self.meas_thread.finished.connect(self.on_meas_completed)
@@ -446,6 +478,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_tcp_open_window.clicked.connect(self.on_tcp_open_window)
 		self.btn_gsm_open_window.clicked.connect(self.on_gsm_open_window)
 		self.btn_notch_open_window.clicked.connect(self.on_open_notch_window)
+		self.agm_lf_and_mag_threshold_button.clicked.connect(self.on_send_threshold)
 
 		self.pwindow.btn_notch_apply.clicked.connect(self.on_apply_notch_settings)
 		#self.pwindow.btn_notch_set_value.clicked.connect(self.on_set_notch_potentiometr)
@@ -463,6 +496,16 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.curve.sigClicked.connect(self.clicked_point)
 		#self.curve.sigPointsClicked.connect(self.clicked_point)
 
+	def on_update_id(self):
+		adr_hi_byte = ((int)(self.agm_serial_number.text())>>8)&0xFF
+		adr_lo_byte = ((int)(self.agm_serial_number.text())&0xff)
+		#if self.agm_serial_number.text() != self.previous_agm_serial_number:
+		#	print(bytearray.fromhex('7f aa 01 02 {:02X} {:02X}'.format(adr_hi_byte, adr_lo_byte)))
+		#	self.ser.write(bytearray.fromhex('7f aa 01 02 {:02X} {:02X}'.format(adr_hi_byte, adr_lo_byte)))
+		#self.previous_agm_serial_number = self.agm_serial_number.text()
+		print(bytearray.fromhex('7f aa 01 02 {:02X} {:02X}'.format(adr_hi_byte, adr_lo_byte)))
+		self.ser.write(bytearray.fromhex('7f aa 01 02 {:02X} {:02X}'.format(adr_hi_byte, adr_lo_byte)))
+
 	def on_apply_notch_settings(self):
 		notch_type = self.pwindow.notch_type_box.currentIndex()
 		try:
@@ -470,14 +513,96 @@ class CommonWindow(QtWidgets.QWidget):
 			self.ser.read(2)
 		except:
 			print("apply notch settings error")
+	def on_send_threshold(self):
+		if self.agm_lf_and_mag_threshold_line.text() == '':
+			threshold_value = 100
+			print(self.agm_lf_and_mag_threshold_line.text())
+		else:
+			threshold_value = self.agm_lf_and_mag_threshold_line.text()
+			print(self.agm_lf_and_mag_threshold_line.text())
+		adr_31_24_byte = ((int)(self.agm_lf_and_mag_threshold_line.text())>>24)&0xFF
+		adr_23_16_byte = ((int)(self.agm_lf_and_mag_threshold_line.text())>>16)&0xff
+		adr_15_8_byte = ((int)(self.agm_lf_and_mag_threshold_line.text())>>8)&0xFF
+		adr_7_0_byte = (int)(self.agm_lf_and_mag_threshold_line.text())&0xFF			
+		if self.agm_lf_and_mag_threshold_combobox.currentIndex() == 0:
+			try:
+				print('7f aa 01 0B {:02X} {:02X} {:02}'.format(0,adr_15_8_byte,adr_7_0_byte))
+				self.ser.write(bytearray.fromhex('7f aa 01 07 {:02X} {:02X} {:02}'.format(0,adr_15_8_byte,adr_7_0_byte)))
+			except:
+				print("on_send_threshold, mag section")
+		else:
+			try:
+				print('7f aa 01 0B {:02X} {:02X} {:02} {:02} {:02}'.format(0,adr_31_24_byte, adr_23_16_byte, adr_15_8_byte, adr_7_0_byte))
+				self.ser.write(bytearray.fromhex('7f aa 01 0B {:02X} {:02X} {:02} {:02} {:02}'.format(0,adr_31_24_byte, adr_23_16_byte, adr_15_8_byte, adr_7_0_byte)))
+			except:
+				print("on_send_threshold, lf section")
+			
 
 	def on_gsm_apply(self):
-		self.gsmwindow.close()
+		if(self.serialDeviceConnected == True):
+			self.mobileNumber = self.gsmwindow.mobilenumberstring.text()
+			mblen = int()
+			if(self.mobileNumber):
+				if(self.mobileNumber[0]=='+'):
+					mblen = 12
+				if(self.mobileNumber[0]=='8'):
+					mblen = 11
+			else:
+				mblen = 12
+
+			if  len(self.mobileNumber) < mblen:
+				msg = QMessageBox()
+				msg.setIcon(QMessageBox.Critical)
+				msg.setText("Error")
+				msg.setInformativeText('Incorrect number')
+				msg.setWindowTitle("Error")
+				msg.exec_()
+			else:
+				#self.gsmwindow.close()
+				self.on_change_gsm_mobile_number()
+		else:
+			msg = QMessageBox()
+			msg.setIcon(QMessageBox.Critical)
+			msg.setText("Connection error")
+			msg.setInformativeText('Device not connected')
+			msg.setWindowTitle("Error")
+			msg.exec_()			
 	def on_tcp_apply(self):
-		self.tcpwindow.close()
+		if(self.serialDeviceConnected == True):
+
+			tcp_port_text = self.tcpwindow.listen_port_string.text()
+			if(tcp_port_text):
+				print(len(tcp_port_text))
+				tcp_ip_text = self.tcpwindow.ip_address_string.text()
+				if(tcp_ip_text):
+					print(tcp_ip_text)
+
+					self.tcpwindow.close()
+				else:
+					msg = QMessageBox()
+					msg.setIcon(QMessageBox.Critical)
+					msg.setText("IP error")
+					msg.setInformativeText('Enter IP address')
+					msg.setWindowTitle("Error")
+					msg.exec_()						
+			else:
+				msg = QMessageBox()
+				msg.setIcon(QMessageBox.Critical)
+				msg.setText("Port error")
+				msg.setInformativeText('Enter port number')
+				msg.setWindowTitle("Error")
+				msg.exec_()	
+		else:
+			msg = QMessageBox()
+			msg.setIcon(QMessageBox.Critical)
+			msg.setText("Connection error")
+			msg.setInformativeText('Device not connected')
+			msg.setWindowTitle("Error")
+			msg.exec_()							
 	def on_tcp_open_window(self):
 		self.tcpwindow.resize(200,100)
 		self.tcpwindow.setWindowTitle("TCP Settings")	
+		self.tcpwindow.on_get_ip_external()
 		self.tcpwindow.show()		
 	def on_gsm_open_window(self):
 		self.gsmwindow.resize(200,100)
@@ -494,7 +619,6 @@ class CommonWindow(QtWidgets.QWidget):
 		else:
 			self.notch_int_value = 51
 			self.pwindow.notch_value_label.setText(str(self.notch_int_value))
-
 	def on_set_notch_potentiometr_down(self):
 		data_to_plotting = list()
 		plot_x = list()
@@ -512,7 +636,6 @@ class CommonWindow(QtWidgets.QWidget):
 		except:
 			print("on_set_notch_potentiometr")	
 		try:
-
 			din = self.ser.read(4)#mcu send fixed size packet
 			parse_byte_list = list()
 
@@ -524,15 +647,8 @@ class CommonWindow(QtWidgets.QWidget):
 			for i in range(len(din)):
 				parse_byte_list.append(int(din[i]))
 
-			#string_for_label = ''
 			string_for_label = [f'0x{i:02X}' for i in parse_byte_list]
-			 
 			print(len(parse_byte_list), din, type(parse_byte_list[0]))
-
-
-
-			#data_to_plotting = notch_parse(parse_byte_list)
-			
 			print(string_for_label)	
 
 			for i in range(20):
@@ -571,16 +687,9 @@ class CommonWindow(QtWidgets.QWidget):
 			parse_byte_list = list()
 			for i in range(len(din)):
 				parse_byte_list.append(int(din[i]))
-
-			#string_for_label = ''
 			string_for_label = [f'0x{i:02X}' for i in parse_byte_list]
 			 
 			print(len(parse_byte_list), din, type(parse_byte_list[0]))
-
-
-
-			#data_to_plotting = notch_parse(parse_byte_list)
-			
 			print(string_for_label)	
 
 			for i in range(20):
@@ -596,7 +705,7 @@ class CommonWindow(QtWidgets.QWidget):
 			for i in range(20):
 				data_out.append((data_input[2*i]<<8)|(data_input[2*i+1]))
 		except:
-			print("parse error")
+			print("notch parse error")
 		return data_out
 
 	def on_connected(self):
@@ -608,6 +717,7 @@ class CommonWindow(QtWidgets.QWidget):
 			print("Connected to {}".format(self.ComPort))
 
 			self.btn_visa_connect.setDisabled(True)
+			self.btn_update_agm_id.setDisabled(False)
 			self.btn_visa_disconnect.setDisabled(False)
 			self.btn_load.setDisabled(False)
 			#self.btn_save.setDisabled(True)
@@ -617,23 +727,44 @@ class CommonWindow(QtWidgets.QWidget):
 			self.agm_utc.setDisabled(False)
 			self.btn_notch_open_window.setDisabled(False)
 			self.btn_download_raw.setDisabled(False)
+			self.serialDeviceConnected = True
+			self.comport_combo.setEnabled(False)
 		except IOError:
 			#pass
 			print("Port already open another programm")
+			#error_dialog = QtWidgets.QErrorMessage()
+			#error_dialog.showMessage('Port already open another programm')
 		except serial.SerialException:
 			print("SerialException")
 		except:
 			print("Unexpected error, Null ComName")
 	def on_change_serial_number(self):
 		if self.agm_serial_number.text() != self.previous_agm_serial_number:
-
-			
 			adr_hi_byte = ((int)(self.agm_serial_number.text())>>8)&0xFF
 			adr_lo_byte = ((int)(self.agm_serial_number.text())&0xff)
 			print(bytearray.fromhex('7f aa 01 02 {:02X} {:02X}'.format(adr_hi_byte, adr_lo_byte)))
 			self.ser.write(bytearray.fromhex('7f aa 01 02 {:02X} {:02X}'.format(adr_hi_byte, adr_lo_byte)))
-
 		self.previous_agm_serial_number = self.agm_serial_number.text()	
+	def on_change_gsm_mobile_number(self):
+		if(self.mobileNumber[0] == "+"):
+			offset = 1
+		else:
+			offset = 0
+		adr0 = ((int)(self.mobileNumber[0+offset])&0xFF)
+		adr1 = ((int)(self.mobileNumber[1+offset])&0xFF)
+		adr2 = ((int)(self.mobileNumber[2+offset])&0xFF)
+		adr3 = ((int)(self.mobileNumber[3+offset])&0xFF)
+		adr4 = ((int)(self.mobileNumber[4+offset])&0xFF)
+		adr5 = ((int)(self.mobileNumber[5+offset])&0xFF)
+		adr6 = ((int)(self.mobileNumber[6+offset])&0xFF)
+		adr7 = ((int)(self.mobileNumber[7+offset])&0xFF)
+		adr8 = ((int)(self.mobileNumber[8+offset])&0xFF)
+		adr9 = ((int)(self.mobileNumber[9+offset])&0xFF)
+		adr10 = ((int)(self.mobileNumber[10+offset])&0xFF)				
+		self.ser.reset_input_buffer()
+		print(bytearray.fromhex('7f aa 01 09 {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X}'.format(adr0, adr1,adr2,adr3,adr4,adr5,adr6,adr7,adr8,adr9,adr10)))
+		self.ser.write(bytearray.fromhex('7f aa 01 09 {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X}'.format(adr0, adr1,adr2,adr3,adr4,adr5,adr6,adr7,adr8,adr9,adr10)))
+		#print(self.ser.read(15))
 	def on_change_notch_filter(self):
 		if self.agm_filterbox.currentText() == "50Hz":
 			adr_byte = 0
@@ -651,6 +782,7 @@ class CommonWindow(QtWidgets.QWidget):
 		
 	def on_disconnected(self):
 		self.btn_visa_connect.setDisabled(False)
+		self.btn_update_agm_id.setDisabled(True)
 		self.btn_visa_disconnect.setDisabled(True)	
 		self.btn_load.setDisabled(True)
 		self.btn_save.setDisabled(True)
@@ -660,16 +792,18 @@ class CommonWindow(QtWidgets.QWidget):
 		self.agm_utc.setDisabled(True)	
 		self.btn_notch_open_window.setDisabled(True)
 		self.btn_download_raw.setDisabled(True)
+		self.serialDeviceConnected = False
+		self.comport_combo.setEnabled(True)
 		try:	
 			self.ser.close()
 		except:
-			pass
+			print("serial port close exception, on_disconnect --traceback")
 		self.first_load = 0
 		print("Disconnected")
 				
 	def on_activated_com_list(self, str):
 		#self.label.setText(str)
-		if self.comport_combo.currentText() == "":
+		if self.comport_combo.currentText() == "" or self.serialDeviceConnected == True:
 			self.btn_visa_connect.setDisabled(True)
 		elif self.comport_combo.currentText() == "Refresh":
 			self.btn_visa_connect.setDisabled(True)
@@ -727,7 +861,6 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.agm_readblock.setText(self.readblock.decode("utf-8"))
 		#self.ser.read()
 
-
 	def header_processing(self, current_index,  header, record_length):
 		utc_date_str = "{:02d}.{:02d}.{:02d}".format(header[17],header[19],header[21])
 		utc_time_str = "{:02d}:{:02d}:{:02d}.{:03d}".format(header[23],header[25],header[27],(header[28]<<8)|header[29])
@@ -773,7 +906,6 @@ class CommonWindow(QtWidgets.QWidget):
 		else:
 			description_str = ""
 			
-
 		try:
 			self.table_of_records.setItem(current_index,0,QtWidgets.QTableWidgetItem(utc_date_str))#full date 06.12.19
 			self.table_of_records.item(current_index, 0).setTextAlignment(QtCore.Qt.AlignCenter|QtCore.Qt.AlignVCenter)
@@ -875,7 +1007,6 @@ class CommonWindow(QtWidgets.QWidget):
 		if fname:
 			try:
 				data_dict = np.load(fname, allow_pickle=True)
-				#print(data_dict)
 				self.parsed_data_list = list()
 				self.records_tool_passage_time = list()
 				self.records_description = list()
@@ -922,7 +1053,6 @@ class CommonWindow(QtWidgets.QWidget):
 			#string_for_label = ''
 			string_for_label = [f'0x{i:02X}' for i in parse_byte_list]
 
-
 			print(string_for_label)
 			#self.data = parse_byte_list
 			if ba != '':
@@ -938,10 +1068,9 @@ class CommonWindow(QtWidgets.QWidget):
 		data_to_plotting = list()
 		parse_byte_list = list()
 
-
 		try:
 			self.ser.write(bytearray.fromhex('7f aa 01 08 00'))
-			time.sleep(0.1)
+			time.sleep(0.001)
 			self.ser.read(66)
 		except:
 			pass
@@ -956,7 +1085,6 @@ class CommonWindow(QtWidgets.QWidget):
 		#40 byte per packet
 		packetCnt = bytes_cnt / 40
 		barInc = 100/packetCnt
-
 
 		print(bytes_cnt, packetCnt, barInc)
 		self.bar.setValue(1)
@@ -977,7 +1105,6 @@ class CommonWindow(QtWidgets.QWidget):
 		data_to_plotting = list()
 		parse_byte_list = list()
 
-
 		try:
 			self.ser.write(bytearray.fromhex('7f aa 01 08 00'))
 			time.sleep(0.1)
@@ -995,7 +1122,6 @@ class CommonWindow(QtWidgets.QWidget):
 		#40 byte per packet
 		packetCnt = bytes_cnt / 40
 		barInc = (100/packetCnt)+1
-
 
 		print(bytes_cnt, packetCnt, barInc)
 		self.bar.setValue(1)
@@ -1036,7 +1162,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_clear.setDisabled(False)		
 		#self.btn_save.setDisable(False)
 		
-
 	def on_interrupted(self):
 		self.meas_thread.running = False
 		
@@ -1108,7 +1233,6 @@ class CommonWindow(QtWidgets.QWidget):
 		        	#self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
 
 	def on_captured(self):
-		#print(self.xpos, self.ypos)
 		try:
 			sss = (self.records_header_list[self.current_row][28]<<8)|self.records_header_list[self.current_row][29]
 			ss = self.records_header_list[self.current_row][27]
@@ -1122,7 +1246,6 @@ class CommonWindow(QtWidgets.QWidget):
 			hh += int(mm/60)
 			mm = int(mm%60)
 			hh = int(hh%24)
-
 
 			utc_time_str = "{:02d}:{:02d}:{:02d}.{:03d}".format(hh,mm,ss,sss)
 			self.records_tool_passage_time[self.current_row] = utc_time_str
@@ -1182,7 +1305,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.connection, self.client_address = self.server_socket.accept()
 		print("new connection from {}".format(self.client_address))
 
-
 	def tcp_server_read_data(self):
 		try:
 			data = self.connection.recv(1024)
@@ -1201,7 +1323,13 @@ class CommonWindow(QtWidgets.QWidget):
 	def on_send_sms(self):
 		try:
 			#on_send_cmd_sms_send()
-			pass
+			msg = QMessageBox()
+			msg.setIcon(QMessageBox.Information)
+			msg.setText("Done")
+			msg.setInformativeText('SMS cmd send to AGM module')
+			msg.setWindowTitle("Done!")
+			msg.exec_()			
+			#pass
 		except:
 			print("send cmd error")
 	def bluetooth_init(self):
@@ -1211,7 +1339,6 @@ class CommonWindow(QtWidgets.QWidget):
 		for addr, name in nearby_devices:
 			print("  {} - {}".format(addr, name))		
 
-
 class evThread(QtCore.QThread):
 	
 	status_signal = QtCore.pyqtSignal(str)
@@ -1220,7 +1347,6 @@ class evThread(QtCore.QThread):
 	def __init__(self, parent = None):
 		QtCore.QThread.__init__(self,parent)
 		self.running = False
-		
 		
 	def run(self):
 		self.running = True
@@ -1258,7 +1384,6 @@ class ppData:
 	def __init__(self, parent = None):
 		dataFromFile = (list)
 		
-
 class paramWindow(QtWidgets.QWidget):
 	def __init__(self, parent = None):
 		QtGui.QWidget.__init__(self, parent)
@@ -1270,7 +1395,6 @@ class paramWindow(QtWidgets.QWidget):
 		self.notch_value_label.setAlignment(QtCore.Qt.AlignHCenter)
 		self.notch_value_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 		
-
 		self.label_notch_filter_value = 90
 
 		self.line_notch_value = QtWidgets.QLineEdit("090")#center frequency for nwa
@@ -1293,7 +1417,6 @@ class paramWindow(QtWidgets.QWidget):
 		self.btn_notch_set_value_down.setMaximumSize(100,50)
 		self.btn_notch_set_value_down.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 
-
 		self.btn_notch_apply = QtWidgets.QPushButton("Apply changes")
 		self.btn_notch_apply.setMaximumSize(100,50)
 		self.btn_notch_apply.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
@@ -1305,7 +1428,6 @@ class paramWindow(QtWidgets.QWidget):
 		self.hbox_notch_param.addWidget(self.notch_value_label,1)
 		self.hbox_notch_param.addWidget(self.btn_notch_set_value,2)
 		self.hbox_notch_param.addWidget(QtWidgets.QLabel(""),3)
-
 
 		self.vbox_notch_param.addWidget(self.notch_type_box, 0)		
 		self.vbox_notch_param.addLayout(self.hbox_notch_param, 1)
@@ -1337,14 +1459,18 @@ class paramWindow_GSM(QtWidgets.QWidget):
 		QtGui.QWidget.__init__(self, parent)
 		self.title_label = QtWidgets.QLabel("GSM settings")
 		self.title_label.setAlignment(QtCore.Qt.AlignHCenter)
-		self.validInt = QtGui.QIntValidator(1,255)
-		
-		self.gsm_mobile_number = QtWidgets.QLabel("mobile number:")
+		database = ['89000000000',"89230000000",'+79000000000',"+79230000000"]
+		completer = QCompleter(database)
+		self.gsm_mobile_number = QtWidgets.QLabel("Mobile number:")
+		self.gsm_mobile_number.setFont(QtGui.QFont('Arial', 11)) 
 		self.gsm_mobile_number.setAlignment(QtCore.Qt.AlignHCenter)
 		self.gsm_mobile_number.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
-		
-		self.mobilenumberstring = QtWidgets.QLineEdit("+70000000000")
+		validator = QRegExpValidator(QtCore.QRegExp("\+7[0-9]{10}|8[0-9]{10}"))
+				
+		self.mobilenumberstring = QtWidgets.QLineEdit("")
+		self.mobilenumberstring.setValidator(validator)
 		self.mobilenumberstring.setMaximumSize(200,50)
+		self.mobilenumberstring.setCompleter(completer)
 		self.mobilenumberstring.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 		#self.mobilenumberstring.setValidator(self.validInt)
 		self.mobilenumberstring.setAlignment(QtCore.Qt.AlignCenter)
@@ -1354,17 +1480,34 @@ class paramWindow_GSM(QtWidgets.QWidget):
 		self.btn_gsm_apply.setMaximumSize(100,50)
 		self.btn_gsm_apply.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 
+		self.btn_gsm_testSMS = QtWidgets.QPushButton("Test\nSMS")
+		self.btn_gsm_testSMS.setMaximumSize(100,50)
+		self.btn_gsm_testSMS.setWhatsThis("test sms to mobile number") #("Отправляет команду к маркерной станции,\n которая отправляет тестовую смс на указанный номер")
+		self.btn_gsm_testSMS.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+
 		self.vbox_gsm = QtWidgets.QVBoxLayout()
 		self.hbox_gsm = QtWidgets.QHBoxLayout()
+		self.hbox_1 = QtWidgets.QHBoxLayout()
+		self.hbox_2 = QtWidgets.QHBoxLayout()
+		self.hbox_3 = QtWidgets.QHBoxLayout()
 
-		self.hbox_gsm.addWidget(self.gsm_mobile_number,0)
-		self.hbox_gsm.addWidget(self.mobilenumberstring,1)
-		self.hbox_gsm.addWidget(self.btn_gsm_apply,2)
-		self.hbox_gsm.addWidget(QtWidgets.QLabel(""),3)
+		self.hbox_1.addWidget(self.gsm_mobile_number,0)
+		self.hbox_1.addWidget(QtWidgets.QLabel(""),1)
+		self.hbox_2.addWidget(self.mobilenumberstring,1)
+		self.hbox_2.addWidget(self.btn_gsm_apply,2)
+		self.hbox_2.addWidget(QtWidgets.QLabel(""),3)
+		self.hbox_3.addWidget(self.btn_gsm_testSMS, 0)
+		self.hbox_3.addWidget(QtWidgets.QLabel(""),1)
 
-		self.hbox_gsm.insertStretch(4,0)
+		self.vbox_gsm.insertLayout(0, self.hbox_1)
+		self.vbox_gsm.insertLayout(1, self.hbox_2)
+		self.vbox_gsm.insertLayout(2, self.hbox_3)
+		self.vbox_gsm.insertStretch(3,0)
+		self.hbox_gsm.insertLayout(0,self.vbox_gsm)
+		self.hbox_gsm.insertStretch(1,0)
 
-		self.setLayout(self.hbox_gsm)		
+		self.setLayout(self.hbox_gsm)
+		self.setFixedSize(260,120)		
 		
 class paramWindow_TCP(QtWidgets.QWidget):
 	def __init__(self, ipext, parent = None,):
@@ -1378,7 +1521,9 @@ class paramWindow_TCP(QtWidgets.QWidget):
 		self.listen_port.setAlignment(QtCore.Qt.AlignHCenter)
 		self.listen_port.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 		self.tcp_client_data = "input data to server"
+		validator = QRegExpValidator(QtCore.QRegExp("[0-9]{5}"))
 		self.listen_port_string = QtWidgets.QLineEdit("7777")
+		self.listen_port_string.setValidator(validator)
 		self.listen_port_string.setMaximumSize(200,50)
 		self.listen_port_string.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 		#self.listen_port_string.setValidator(self.validInt)
@@ -1434,10 +1579,11 @@ class paramWindow_TCP(QtWidgets.QWidget):
 		self.vbox_level2_tcp.insertLayout(0, self.hbox_level3_tcp)
 		self.vbox_level2_tcp.addWidget(self.tcp_logger_label,1)
 		self.vbox_level2_tcp.addWidget(self.textBox,2)
-		self.setLayout(self.vbox_level2_tcp)		
-		
-						
-		
+		self.setLayout(self.vbox_level2_tcp)
+	def on_get_ip_external(self):
+		self.ext_ip = get('https://api.ipify.org').text		
+		if self.ip_address_string.text() == '':
+			self.ip_address_string.setText("{}".format(self.ext_ip))
 def serial_ports():
 	""" Lists serial port names
 		:raises EnvironmentError:
@@ -1464,16 +1610,27 @@ def serial_ports():
 		except (OSError, serial.SerialException):
 			pass
 	return result		
-		
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)		
 
 if __name__ == '__main__':
 	import sys
 	import time, math
-	
+
 	app =QtWidgets.QApplication(sys.argv)
 	ex = CommonWindow()
 	ex.setFont(QtGui.QFont('Arial', 9))#, QtGui.QFont.Bold
 	ex.setWindowTitle("AGM Viewer")
+	app.setStyle('Fusion')
+	#app.setStyleSheet ( qdarkstyle . load_stylesheet ())
+	#ex.setWindowFlags(ex.windowFlags() | QtCore.Qt.FramelessWindowHint)
 	ex.comport_combo.addItems(serial_ports())
 	#ex.setFixedSize(500,400)
 	#ex.resize(300,200)

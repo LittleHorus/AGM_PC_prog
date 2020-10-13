@@ -56,6 +56,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "oled.h"
+#include "math.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -66,6 +67,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define M_PI 3.14159265358979323846
 
 void* p = (void *)0x60000001; 
 void* adr = (void *)0x60000000; 
@@ -101,10 +103,18 @@ uint8_t notch_filter_configure = 0, adc_m_cnt = 0;
 uint8_t notch_50Hz_value = 90, notch_60Hz_value = 51;
 uint8_t notch_type = 0;
 uint16_t adc_m[25];
+uint16_t xCorData[20],zCorData[20], corHead = 0, corTail = 0;
+uint16_t z_refCor[20];
+uint32_t z_ref_sum_watcher = 0;
+float ref_mean = 2214.158;
+float ref_sigma = 1386.083;//38424539.301;
+
+uint16_t adcCorDataBuf[20], adcCorDataHead = 0, adcCorDataTail = 0;
 
 uint16_t record_start_delay_cnt = 0; 
 uint8_t record_start_delay_done = 0;
 uint32_t temp_fram_address_cnt = 0;
+uint8_t correlationPassCounter = 0;
 
 uint8_t at_wakeup_try = 3;
 uint8_t gps_latch_done = 0, gps_latch_cnt = 0;
@@ -131,6 +141,33 @@ uint16_t time_update_cnt = 10000;
 uint8_t error_led_state = 0;
 uint32_t record_length_enough_cnt = 0;
 uint8_t record_length_enough = 0;
+char mobileNumber[11];
+float correlation = 0;
+float max_correlation = 0, min_correlation = 1;
+float max_covar = 0, min_covar = -5e+6;
+uint32_t cor_coef = 0;
+uint32_t cor_norm = 0;
+uint32_t signal_sum = 0;
+uint32_t ref_sum = 0;
+float corArray[50], covArray[50];
+uint8_t cHead = 0, cTail = 0, covHead = 0;
+uint8_t cor_done = 1;
+  uint16_t dataMonADC[100];
+  float temp_cor_coef = 0;
+  uint32_t temp_signal_sum = 0;
+  float temp_signal_mean = 0;
+  float temp_signal_dis = 0;
+  float temp_signal_sigma = 0;
+  float hi_side = 0;
+  float sigMean = 0.0;
+  
+uint16_t meas_time_covar = 0;
+uint8_t evaluate_start = 0, evaluate_end = 0;
+
+uint16_t dataCounterADC = 0;
+
+float z_ref_sqo = 0, z_ref_disp = 0, z_ref_hside = 0, z_ref_mean = 0;
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -178,6 +215,11 @@ uint8_t fram_gps_state = 0;
 uint16_t sram_tx_buf[10];
 uint16_t sram_rx_buf[10];
 
+uint16_t corRecordBuf[50];
+uint16_t corRecordHead = 0, corRecordTail = 0;
+float corFloatBuf[40];
+uint8_t corFloatHead = 0, corFloatTail = 0;
+
 uint16_t temp_min_value = 4095, temp_max_value = 0;
 uint16_t buf_tail = 0, buf_head = 0, temp_tail_sleep = 0;
 uint8_t write_from_buf_cnt = 0;
@@ -206,7 +248,59 @@ struct gps_status_struct{
   
 }agm_gps_status;
 
+struct lfDetectStruct{
+  uint8_t captureEvent;
+  float maxCovar;
+  float maxCor;
+  float deltaCovar;
+  uint16_t adcDelta;
+  uint8_t UpperLimitEvent;//adc value exceed 4095 value
+  uint8_t LowerLimitEvent;//adc value equ 0
+  
+}lfdetect;
+struct covarDataStruct{
+  int32_t covarCoefBuf[40];
+  uint8_t covarCoefBufHead;
+  uint8_t covarCoefBufTail;
+  uint16_t covarDataBuf[40];
+  uint8_t covarDataBufHead;
+  uint8_t covarDataBufTail;
+  
+  int32_t covar_max;
+  int32_t covar_min;
+}covar;
+
+struct lpfStruct{
+  uint32_t dout;
+  uint16_t dout_prev;
+  float coef_k;
+  uint16_t din;
+  uint8_t error_cnt;
+  
+}lpfData;
+
 uint32_t backupReadData = 0, test_point = 0;
+uint8_t covar_min_counts = 0;
+
+uint16_t covarDataMonitorArr[100];
+uint8_t cdma_cnt = 0;
+int32_t covarCoefArr[100];
+uint8_t cca_cnt = 0;
+uint16_t lpfArray[40],lpfClearDataArray[40];
+uint8_t lpfArrayHead = 0, lpfClearDataArrayHead = 0;
+uint8_t lf_record_state_prev = 0, lf_record_state = 0;
+uint16_t usb_test_data[4096];
+
+//uint16_t lf_pre_buffer[30], lf_active_buffer[30], lf_past_buffer[30];
+
+uint16_t covar_buffer[11],lf_data_buffer[30];
+uint8_t covar_buffer_enough = 0, covar_buffer_head = 0, lf_data_buffer_head = 0, covar_in_buffer_counter = 0, covar_buffer_result_head = 0;
+int32_t covar_buffer_result[40];
+uint8_t lf_write_event_on_off = 0, lf_data_buffer_tail = 0;
+uint8_t lf_past_record_cnt = 0, lf_past_record = 0, lf_past_record_state = 0;
+
+float covar_coef_param = 0.5e7;
+uint16_t mag_coef_param = 100;
 
 uint8_t buff_temp[200], buff_temp_cnt = 0;
 uint8_t buzzer_alarm = 0;
@@ -233,6 +327,7 @@ RTC_DateTypeDef    DateToUpdate_set;
 
 
 uint32_t _fram_address_cnt = 0, card_watcher =0;
+uint8_t corRecordStart = 0, corRecordState = 0, corRecordPreState = 0;
 
 /* USER CODE END PV */
 
@@ -301,14 +396,412 @@ void fram_write_data(uint16_t data){
     card_watcher = _fram_address_cnt;
   HAL_SRAM_WriteOperation_Enable( &hsram1);
 }
-/******************************************************************************/
-void threshold_buffer(uint16_t data_input, uint16_t threshold){	
+/******************************************************************************/ 
+float correlation_func(uint16_t data_input){
+  xCorData[corHead++] = data_input;
+  if(corHead>19)corHead=0;
+  uint32_t temp_cor_coef = 0;
+  uint32_t temp_signal_sum = 0;
+  //uint32_t temp_ref_sum = 0;
+  if(correlationPassCounter <=19)correlationPassCounter++;
+  else{
+    for(uint8_t iCor = 0;iCor < 20; iCor++){
+      temp_cor_coef += (uint32_t)(z_refCor[iCor]*xCorData[iCor]);
+      temp_signal_sum += (uint32_t)((uint32_t)xCorData[iCor]*(uint32_t)xCorData[iCor]);
+    }
+    cor_coef = temp_cor_coef/20;
+    cor_norm = (uint32_t)(sqrtf(temp_signal_sum)*sqrtf(z_ref_sum_watcher))/20;
+    correlation = (float)cor_coef/cor_norm;
+    if(correlation > max_correlation) max_correlation  = correlation;
+    if(correlation < min_correlation)min_correlation = correlation;
+  }//enough counts for correlation
+  cor_done = 1;
+  return temp_cor_coef;
+}
+/******************************************************************************/ 
+float correlation_func_standart(uint16_t data_input){
+  //adcCorDataBuf[20], adcCorDataHead = 0, adcCorDataTail = 0;
+  evaluate_start = 1;
+  evaluate_end = 0;
+  dataMonADC[dataCounterADC++] = data_input;
+  if(dataCounterADC >=100)dataCounterADC = 0;
+            
+  adcCorDataBuf[adcCorDataHead++] = data_input;
+  if(adcCorDataHead>10)adcCorDataHead=0;
+  temp_cor_coef = 0;
+  temp_signal_sum = 0;
+  temp_signal_mean = 0;
+  temp_signal_dis = 0;
+  temp_signal_sigma = 0;
+  hi_side = 0;
+  
+  if(correlationPassCounter <=10)correlationPassCounter++;
+  else{
+    for(uint8_t iCor = 0;iCor < 11; iCor++){
+      temp_signal_sum += ((uint32_t)adcCorDataBuf[iCor]);
+    }
+    sigMean = (float)temp_signal_sum/11;
+    
+    for(uint8_t iCor = 0;iCor < 11; iCor++){
+      temp_signal_dis += ((float)adcCorDataBuf[iCor] - sigMean)*((float)adcCorDataBuf[iCor] - sigMean);
+    }    
+    temp_signal_sigma = sqrtf(temp_signal_dis/11);
+    
+    for(uint8_t iCor = 0;iCor < 11; iCor++){
+      hi_side += ((float)adcCorDataBuf[iCor] - (float)sigMean)*((float)z_refCor[iCor] - z_ref_mean);
+    }     
+    correlation = (hi_side/11)/(ref_sigma*temp_signal_sigma);
+    
+    if(correlation > max_correlation)max_correlation  = correlation;
+    if(correlation < min_correlation)min_correlation = correlation;
+    
+    if(hi_side > max_covar) max_covar = hi_side;
+    if(hi_side < min_covar) min_covar = hi_side;
+    
+    corArray[cHead++] = correlation;
+    covArray[covHead++] = hi_side;
+    if(cHead >= 50) cHead = 0;
+    if(covHead >= 50) covHead = 0;//covariation data buffer
+
+  }//enough counts for correlation
+  cor_done = 1;
+  evaluate_end = 1;
+  evaluate_start = 0;
+  
+  return temp_cor_coef;
+}
+int32_t covar_evaluate(uint16_t arr){
+  int32_t temp_covar = 0;
+  
+  covar_buffer[covar_buffer_head++] = arr;
+  if(covar_buffer_head > 10)covar_buffer_head = 0;
+  if(covar_in_buffer_counter < 10)covar_in_buffer_counter++;
+  if(covar_in_buffer_counter >= 10)covar_buffer_enough = 1;
+  
+  adcCorDataBuf[adcCorDataHead++] = arr;
+  if(adcCorDataHead>10)adcCorDataHead=0;
+  temp_cor_coef = 0;
+  temp_signal_sum = 0;
+  temp_signal_mean = 0;
+  
+
+  for(uint8_t iCor = 0;iCor < 11; iCor++){
+    temp_signal_sum += ((uint32_t)covar_buffer[iCor]);
+    //temp_ext_signal += ((uint32_t)arr[offset+Cor]);
+  }
+  sigMean = (float)temp_signal_sum/11;
+    
+  for(uint8_t iCor = 0;iCor < 11; iCor++){
+    temp_covar += ((float)covar_buffer[iCor] - (float)sigMean)*((float)z_refCor[iCor] - z_ref_mean);
+  }     
+    
+  if(temp_covar > max_covar) max_covar = temp_covar;
+  if(temp_covar < min_covar) min_covar = temp_covar;
+    
+  covArray[covHead++] = temp_covar;
+  //covar_buffer_result[covar_buffer_result_head++] = temp_covar;
+  //if(covar_buffer_result_head >= 40)covar_buffer_result_head = 0;
+
+  if(covHead >= 50) covHead = 0;//covariation data buffer
+  cor_done = 1;
+  
+  return (temp_covar);// div 11
+}
+
+void write_record_header(){
+  
+  HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN); // RTC_FORMAT_BIN , RTC_FORMAT_BCD
+  HAL_RTC_GetDate(&hrtc, &DateToUpdate, RTC_FORMAT_BIN);
+  recordTime.Seconds = sTime.Seconds;
+  recordTime.Minutes = sTime.Minutes;
+  recordTime.Hours = sTime.Hours;
+  recordDate.Date = DateToUpdate.Date;
+  recordDate.Month = DateToUpdate.Month;
+  recordDate.Year = DateToUpdate.Year;
+  agm.event = EVENT;
+  
+  //record_length_enough_cnt = 5001;
+  //record_length_enough = 0;
+  //temp_fram_address_cnt = _fram_address_cnt;
+  buzzer_alarm = 1;
+  record_number++;
+  recordHeader[0] = 0x0000;
+  recordHeader[1] = 0xAA55;
+  recordHeader[2] = record_number;
+  recordHeader[3] = agm_option_menu.record_mode;
+  recordHeader[4] = agm_gps_status.latitude_hi;
+  recordHeader[5] = agm_gps_status.latitude_lo;
+  recordHeader[6] = agm_gps_status.latitude_direction;
+  recordHeader[7] = agm_gps_status.longitude_hi;
+  recordHeader[8] = agm_gps_status.longitude_lo;
+  recordHeader[9] = agm_gps_status.longitude_direction;
+  recordHeader[10] = recordDate.Date;//agm_gps_status.utc_date_day;
+  recordHeader[11] = recordDate.Month;//agm_gps_status.utc_date_month;
+  recordHeader[12] = recordDate.Year;//agm_gps_status.utc_date_year;
+  recordHeader[13] = recordTime.Hours;//agm_gps_status.utc_time_hh;
+  recordHeader[14] = recordTime.Minutes;//agm_gps_status.utc_time_mm;
+  recordHeader[15] = recordTime.Seconds;//agm_gps_status.utc_time_ss;
+  recordHeader[16] = (uint8_t)(agm_gps_status.utc_time_sss>>8);
+              
+  fram_write_buf(recordHeader, 17);//write header at start of record
+                 
+  
+}
+
+void correlator_threshold_buffer(uint16_t data_input){	
 	temp_buf[buf_head++] = data_input; 
+        
+        
+        corRecordBuf[corRecordHead++] = data_input;
+        if(corRecordHead >= 40)corRecordHead=0;
+        
         if(buf_head >= 30)buf_head = 0;
         if(buf_len_cnt<30){buf_len_cnt++;write_from_buf_cnt++;}
+        
+        
+        /*
+        if(buf_len_cnt >= 10){
+          xCorData[corHead++] = data_input;
+          if(corHead>19)corHead=0;
+          uint32_t temp_cor_coef = 0;
+          uint32_t temp_signal_sum = 0;
+          //uint32_t temp_ref_sum = 0;
+          if(correlationPassCounter <=19)correlationPassCounter++;
+          else{
+            for(uint8_t iCor = 0;iCor < 20; iCor++){
+              temp_cor_coef += (uint32_t)(z_refCor[iCor]*xCorData[iCor]);
+              temp_signal_sum += (uint32_t)((uint32_t)xCorData[iCor]*(uint32_t)xCorData[iCor]);
+            }
+            cor_coef = temp_cor_coef/20;
+            cor_norm = (uint32_t)(sqrtf(temp_signal_sum)*sqrtf(z_ref_sum_watcher))/20;
+            correlation = (float)cor_coef/cor_norm;
+            if(correlation > max_correlation) max_correlation  = correlation;
+            if(correlation < min_correlation)min_correlation = correlation;
+          }//enough counts for correlation
+          cor_done = 1;          
+        }*/
+        
+        
         if(buf_len_cnt>=30){            
           if(write_from_buf_cnt <30) write_from_buf_cnt++;
-            
+          
+          
+          //Block MAG
+          temp_max_value = 0;
+          temp_min_value = 4095;    
+          for(uint8_t iminmax = 0; iminmax < 29; iminmax++){
+            if(temp_buf[iminmax] > temp_max_value) temp_max_value = temp_buf[iminmax];
+            if(temp_buf[iminmax] < temp_min_value) temp_min_value = temp_buf[iminmax];
+          }
+          //Exceed threshold? yes -> send from buff, no stop writing
+          
+          if((temp_max_value - temp_min_value) > 400){
+            if(write_from_buf_cnt >= 30){
+              temp_fram_write_event = 1;
+              if(record_state != 1)record_start = 1;
+              record_state = 1;   
+            }
+            else{
+              temp_fram_write_event = 1;
+              record_state = 1; 
+              record_start = 0;//no header, continue last record
+              write_from_buf_cnt--;
+            }
+          }
+          else{
+            //if(write_from_buf_cnt <11)write_from_buf_cnt++;//increment counter, which indicates how much data write to fram
+            //write_from_buf_cnt = 30;
+            buzzer_alarm = 0;
+            //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);//disable buzzer
+            temp_fram_write_event = 0;
+            //agm.event = 0;//no event
+            record_state = 0;
+          }
+          //Block MAG
+          
+          //Block 22Hz
+          
+          
+          //Block 22Hz
+          
+          //Common write block
+          
+          if(temp_fram_write_event == 1){
+             HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN); // RTC_FORMAT_BIN , RTC_FORMAT_BCD
+             HAL_RTC_GetDate(&hrtc, &DateToUpdate, RTC_FORMAT_BIN);
+             recordTime.Seconds = sTime.Seconds;
+             recordTime.Minutes = sTime.Minutes;
+             recordTime.Hours = sTime.Hours;
+             recordDate.Date = DateToUpdate.Date;
+             recordDate.Month = DateToUpdate.Month;
+             recordDate.Year = DateToUpdate.Year;
+             agm.event = EVENT;
+             if(record_start == 1){
+               record_length_enough_cnt = 5001;
+               record_length_enough = 0;
+               temp_fram_address_cnt = _fram_address_cnt;
+               buzzer_alarm = 1;
+               record_number++;
+               recordHeader[0] = 0x0000;
+               recordHeader[1] = 0xAA55;
+               recordHeader[2] = record_number;
+               recordHeader[3] = agm_option_menu.record_mode;
+               recordHeader[4] = agm_gps_status.latitude_hi;
+               recordHeader[5] = agm_gps_status.latitude_lo;
+               recordHeader[6] = agm_gps_status.latitude_direction;
+               recordHeader[7] = agm_gps_status.longitude_hi;
+               recordHeader[8] = agm_gps_status.longitude_lo;
+               recordHeader[9] = agm_gps_status.longitude_direction;
+               recordHeader[10] = recordDate.Date;//agm_gps_status.utc_date_day;
+               recordHeader[11] = recordDate.Month;//agm_gps_status.utc_date_month;
+               recordHeader[12] = recordDate.Year;//agm_gps_status.utc_date_year;
+               recordHeader[13] = recordTime.Hours;//agm_gps_status.utc_time_hh;
+               recordHeader[14] = recordTime.Minutes;//agm_gps_status.utc_time_mm;
+               recordHeader[15] = recordTime.Seconds;//agm_gps_status.utc_time_ss;
+               recordHeader[16] = (uint8_t)(agm_gps_status.utc_time_sss>>8);
+               
+               fram_write_buf(recordHeader, 17);//write header at start of record
+               
+               for(uint8_t fram_i = 0; fram_i <29;fram_i++){
+                    fram_write_data(temp_buf[buf_tail++]);
+                    if(buf_tail >= 30) buf_tail = 0;
+                    
+               }
+               
+               
+               //if(_fram_address_cnt <= (262144-WRITE_READ_ADDR))_fram_address_cnt++;
+              record_start = 0;
+             }
+             if((record_start == 0)&&(write_from_buf_cnt<30)){
+               /////////////////////////////buzzer_alarm = 1;//fix buzzer long record interrupt
+               if(write_from_buf_cnt != 0){
+                 for(uint8_t fram_i = 0; fram_i <write_from_buf_cnt;fram_i++){
+                      fram_write_data(temp_buf[buf_tail++]);
+                      if(buf_tail >= 30) buf_tail = 0;
+                 }               
+               }
+               fram_write_data(data_input);
+               write_from_buf_cnt = 0;
+             }
+             if((record_start == 0)&&(write_from_buf_cnt==30)){
+               fram_write_data(data_input);  
+               
+             }             
+          }
+          else {
+            if(record_prestate == 1){
+              for(uint8_t fram_i = 0; fram_i < 29;fram_i++){
+                   fram_write_data(temp_buf[buf_tail++]);
+                   if(buf_tail >= 30) buf_tail = 0;
+                   write_from_buf_cnt = 0;
+                   //write_from_buf_cnt--;
+              }              
+              fram_write_settings((uint16_t)(_fram_address_cnt>>16), 6);
+              fram_write_settings((uint16_t)(_fram_address_cnt&0xffff), 7);
+              fram_write_settings(record_number, 8);
+              if((record_length_enough == 0)&&(record_length_enough_cnt != 0)){
+                record_number -= 1;
+                record_length_enough_cnt = 0;
+                fram_write_settings(record_number, 8);
+                _fram_address_cnt = temp_fram_address_cnt;
+                fram_write_settings((uint16_t)(_fram_address_cnt>>16), 6);
+                fram_write_settings((uint16_t)(_fram_address_cnt&0xffff), 7);                
+              }
+            }
+             //need shift tail for except colisions
+             temp_tail_sleep++;
+             if(temp_tail_sleep > buf_len)buf_tail++;
+          } 
+          record_prestate = record_state;
+        }	
+}
+void covar_threshold_buffer(uint16_t data_input){	
+        uint16_t covar_to_fram = 0;
+        
+        if(covar_buffer_enough == 1){
+            //lf_data_buffer[lf_data_buffer_head++] = data_input;
+            //if(lf_data_buffer_head > 30)lf_data_buffer_head = 0;          
+
+            covar_buffer_result[covar_buffer_result_head++] = covar_evaluate(data_input);
+            if(covar_buffer_result_head >= 40)covar_buffer_result_head = 0;
+              
+            covar.covar_max = 0;
+            covar.covar_min = 0;
+            for(uint8_t ic = 0; ic<40; ic++){
+                if(covar_buffer_result[ic] > covar.covar_max) covar.covar_max = covar_buffer_result[ic];
+                if(covar_buffer_result[ic] < covar.covar_min) covar.covar_min = covar_buffer_result[ic];
+            }
+            covar_to_fram = (uint16_t) (covar.covar_max/10000);
+              
+            if(covar.covar_max>covar_coef_param){
+                lf_write_event_on_off = 1;
+                lf_record_state = 1;
+                //buzzer_alarm = 1;
+                //agm.event = 1;
+            }
+            else{
+                lf_write_event_on_off = 0;
+                lf_record_state = 0;
+                buzzer_alarm = 0;
+                //temp_fram_write_event = 0;
+                //agm.event = 0;//no event
+                //record_state = 0;            
+            }             
+            if((lf_record_state == 1)&&(lf_record_state_prev == 0)){
+                write_record_header();
+                   /*
+                   for(uint8_t ilf = 0; ilf <30;ilf++){
+                      fram_write_data(lf_data_buffer[lf_data_buffer_tail++]);
+                      if(lf_data_buffer_tail >= 30)lf_data_buffer_tail = 0;
+                   }*/
+                   //write 30 previous data
+                fram_write_data(covar_to_fram);  
+            }
+            if((lf_record_state == 1)&&(lf_record_state_prev == 1)){
+                fram_write_data(covar_to_fram);
+                  
+            }
+            if((lf_record_state == 0)&&(lf_record_state_prev == 1)){
+
+            } 
+           
+            if((lf_record_state == 0)&&(lf_record_state_prev == 0)){
+                lf_data_buffer_tail++;
+                if(lf_data_buffer_tail >= 30)lf_data_buffer_tail = 0;
+            }             
+              
+            lf_record_state_prev = lf_record_state;
+          
+        }//coval enough
+        else{
+          covar_evaluate(data_input);
+          //lf_data_buffer[lf_data_buffer_head++] = data_input;
+          //if(lf_data_buffer_head > 30)lf_data_buffer_head = 0;
+        }
+               	
+}
+
+uint16_t lpf_mag(uint16_t data_input){
+  float inputf = (float) data_input;
+  float dataprevf = (float) lpfData.dout_prev;
+  float doutf = dataprevf*(1.0-lpfData.coef_k) + lpfData.coef_k * inputf;
+  lpfData.dout = (uint16_t) doutf;  //((float)(lpfData.dout_prev)*(1.0-lpfData.coef_k) + lpfData.coef_k*(float)data_input);
+  
+  return lpfData.dout;
+}
+
+
+/******************************************************************************/ 
+void threshold_buffer(uint16_t data_input, uint16_t threshold){	
+	temp_buf[buf_head++] = data_input; 
+        
+        if(buf_head >= 30)buf_head = 0;
+        if(buf_len_cnt<30){buf_len_cnt++;write_from_buf_cnt++;}
+
+        if(buf_len_cnt>=30){            
+          if(write_from_buf_cnt <30) write_from_buf_cnt++;
+          
+          //Block MAG
           temp_max_value = 0;
           temp_min_value = 4095;    
           for(uint8_t iminmax = 0; iminmax < 29; iminmax++){
@@ -339,6 +832,8 @@ void threshold_buffer(uint16_t data_input, uint16_t threshold){
             //agm.event = 0;//no event
             record_state = 0;
           }
+          //Block MAG
+
           
           if(temp_fram_write_event == 1){
              HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN); // RTC_FORMAT_BIN , RTC_FORMAT_BCD
@@ -392,7 +887,6 @@ void threshold_buffer(uint16_t data_input, uint16_t threshold){
                  for(uint8_t fram_i = 0; fram_i <write_from_buf_cnt;fram_i++){
                       fram_write_data(temp_buf[buf_tail++]);
                       if(buf_tail >= 30) buf_tail = 0;
-                      
                  }               
                }
                fram_write_data(data_input);
@@ -637,7 +1131,7 @@ void usb_tx(){
             CDC_Transmit_FS(UserTxBufferFS, 64); 
           }
           if(UserRxBufferFS[4] == 0x01){
-            usb_block_offset += 20;
+            
             fram_read_buf(usb_block_buf, 20, usb_block_offset);
             
             UserTxBufferFS[0] = (uint8_t)(usb_block_offset>>24);
@@ -647,7 +1141,7 @@ void usb_tx(){
             UserTxBufferFS[4] = 0xf1;
             UserTxBufferFS[5] = 0xfe;
             
-            usb_block_offset += 20;
+            //usb_block_offset += 20;
             fram_read_buf(usb_block_buf, 20, usb_block_offset);
             for(uint8_t usb_i = 0; usb_i < 20; usb_i++){
               UserTxBufferFS[2*usb_i+6] = (uint8_t)(usb_block_buf[usb_i]>>8);
@@ -663,17 +1157,82 @@ void usb_tx(){
               UserTxBufferFS[2*usb_i+7] = (uint8_t)(usbTxbufTemp[usb_i]&0xff);//(uint8_t)temp_dataRecord[usb_i];
               
             } 
-*/            
+*/          usb_block_offset += 20;  
             CDC_Transmit_FS(UserTxBufferFS, 64); 
           }
 
         }//usb small packed transfer
-        if(UserRxBufferFS[3] == 0x09){
 
+        if(UserRxBufferFS[3] == 0x09){//afe configure
+          if(UserRxBufferFS[4] == 0x07)mobileNumber[0] = 0x30+0x07;
+          if(UserRxBufferFS[4] == 0x08)mobileNumber[0] = 0x30+0x07;
           
-          //CDC_Transmit_FS(UserTxBufferFS, 2048);
+          mobileNumber[1] = UserRxBufferFS[5];
+          mobileNumber[2] = UserRxBufferFS[6];
+          mobileNumber[3] = UserRxBufferFS[7];
+          mobileNumber[4] = UserRxBufferFS[8];
+          mobileNumber[5] = UserRxBufferFS[9];
+          mobileNumber[6] = UserRxBufferFS[10];
+          mobileNumber[7] = UserRxBufferFS[11];
+          mobileNumber[8] = UserRxBufferFS[12];
+          mobileNumber[9] = UserRxBufferFS[13];
+          mobileNumber[10] = UserRxBufferFS[14];
+          
+          UserTxBufferFS[0] = 0x00;
+          UserTxBufferFS[1] = 0x00;
+          UserTxBufferFS[2] = 0xaa;
+          UserTxBufferFS[3] = 0x5e;
+          
+          UserTxBufferFS[4] = 'O';
+          UserTxBufferFS[5] = 'k';
+          UserTxBufferFS[6] = '.';
+          
+          CDC_Transmit_FS(UserTxBufferFS, 64);
         }        
-        
+        if(UserRxBufferFS[3] == 0x0A){
+          if(UserRxBufferFS[4] == 0x00){
+            
+            temp_recordCnt = 4096;
+            usb_offset = 0;
+            usb_block_offset = 0;
+            
+            //fram_read_buf(temp_dataRecord, 32, 0);
+            UserTxBufferFS[0] = (uint8_t)(temp_recordCnt>>24);
+            UserTxBufferFS[1] = (uint8_t)(temp_recordCnt>>16);
+            UserTxBufferFS[2] = (uint8_t)(temp_recordCnt>>8);
+            UserTxBufferFS[3] = (uint8_t)(temp_recordCnt&0xff);
+            UserTxBufferFS[4] = 0xf0;
+            UserTxBufferFS[5] = 0xfe;            
+            UserTxBufferFS[6] = (uint8_t)(temp_recordCnt>>24);
+            UserTxBufferFS[7] = (uint8_t)(temp_recordCnt>>16);
+            UserTxBufferFS[8] = (uint8_t)(temp_recordCnt>>8);
+            UserTxBufferFS[9] = (uint8_t)(temp_recordCnt&0xff);
+           
+            CDC_Transmit_FS(UserTxBufferFS, 64); 
+          }
+          if(UserRxBufferFS[4] == 0x01){
+            
+
+            UserTxBufferFS[0] = (uint8_t)(usb_block_offset>>24);
+            UserTxBufferFS[1] = (uint8_t)(usb_block_offset>>16);
+            UserTxBufferFS[2] = (uint8_t)(usb_block_offset>>8);
+            UserTxBufferFS[3] = (uint8_t)(usb_block_offset&0xff);
+            UserTxBufferFS[4] = 0xf1;
+            UserTxBufferFS[5] = 0xfe;
+            
+            //usb_block_offset += 20;
+            //fram_read_buf(usb_block_buf, 20, usb_block_offset);
+            
+            for(uint8_t usb_i = 0; usb_i < 20; usb_i++){
+              
+              UserTxBufferFS[2*usb_i+6] = (uint8_t)(usb_test_data[usb_i+usb_block_offset]>>8);
+              UserTxBufferFS[2*usb_i+7] = (uint8_t)(usb_test_data[usb_i+usb_block_offset]&0xff);
+            }
+            usb_block_offset += 20;
+            CDC_Transmit_FS(UserTxBufferFS, 64); 
+          }
+
+        }//usb small packed transfer        
         
         //clear start byte to prevent double proc
         UserRxBufferFS[0] = 0x00;
@@ -796,19 +1355,25 @@ int main(void)
   //if(!(RTC->ISR & RTC_ISR_INITS))
   MX_RTC_Init();
 
-  
-  //HAL_PWR_EnableBkUpAccess();
-  
-  //backupReadData = HAL_RTCEx_BKUPRead(&RtcHandle, RTC_BKP_DR1);
-  /*
-  if (backupReadData != 0x32F2)
-  {
-    rtcInit();
-
+  //float b_sqrt = 0;
+  //b_sqrt = sqrtf(4095.5*1023.89);
+  for(uint8_t iCor = 0; iCor <11; iCor++){ 
+    z_refCor[iCor] = (uint16_t)(2047*sin(44*M_PI*0.01*iCor)+2048);
+    z_ref_sum_watcher += (uint32_t)(z_refCor[iCor]);
   }
-  */
-  //rtcInit();
-  //MX_RTC_Init();
+  z_ref_mean = (float)z_ref_sum_watcher/11;
+  
+  
+  for(uint8_t iCor = 0; iCor <11; iCor++){ 
+    //z_ref_hside += (float)z_refCor[iCor] - z_ref_mean;
+    z_ref_disp += ((float)z_refCor[iCor] - z_ref_mean)*((float)z_refCor[iCor] - z_ref_mean);
+  }  
+  z_ref_sqo = sqrtf(z_ref_disp/11);
+  for(uint16_t usb_i = 0; usb_i < 4095; usb_i++){
+      usb_test_data[usb_i] = usb_i;
+      
+  }
+  
   
   
   MX_I2C1_Init();
@@ -854,6 +1419,10 @@ int main(void)
   agm_option_menu.notch_filter = 0;
   agm_option_menu.erase_data = 0;
   agm_option_menu.download_data = 0;
+  
+  lpfData.coef_k = 0.025;//0.025
+  lpfData.dout_prev = 0;
+  
   
   LL_ADC_REG_StartConversion(ADC1);
 
