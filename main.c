@@ -298,8 +298,11 @@ uint8_t covar_buffer_enough = 0, covar_buffer_head = 0, lf_data_buffer_head = 0,
 int32_t covar_buffer_result[40];
 uint8_t lf_write_event_on_off = 0, lf_data_buffer_tail = 0;
 uint8_t lf_past_record_cnt = 0, lf_past_record = 0, lf_past_record_state = 0;
+uint8_t lf_record_length = 0;
+uint16_t lf_hold_buffer[50];
 
-float covar_coef_param = 0.5e7;
+
+float covar_coef_param = 0.3e7;
 uint16_t mag_coef_param = 100;
 
 uint8_t buff_temp[200], buff_temp_cnt = 0;
@@ -723,11 +726,11 @@ void covar_threshold_buffer(uint16_t data_input){
             //if(lf_data_buffer_head > 30)lf_data_buffer_head = 0;          
 
             covar_buffer_result[covar_buffer_result_head++] = covar_evaluate(data_input);
-            if(covar_buffer_result_head >= 40)covar_buffer_result_head = 0;
+            if(covar_buffer_result_head >= 20)covar_buffer_result_head = 0;
               
             covar.covar_max = 0;
             covar.covar_min = 0;
-            for(uint8_t ic = 0; ic<40; ic++){
+            for(uint8_t ic = 0; ic<20; ic++){
                 if(covar_buffer_result[ic] > covar.covar_max) covar.covar_max = covar_buffer_result[ic];
                 if(covar_buffer_result[ic] < covar.covar_min) covar.covar_min = covar_buffer_result[ic];
             }
@@ -748,26 +751,38 @@ void covar_threshold_buffer(uint16_t data_input){
                 //record_state = 0;            
             }             
             if((lf_record_state == 1)&&(lf_record_state_prev == 0)){
-                write_record_header();
-                   /*
-                   for(uint8_t ilf = 0; ilf <30;ilf++){
-                      fram_write_data(lf_data_buffer[lf_data_buffer_tail++]);
-                      if(lf_data_buffer_tail >= 30)lf_data_buffer_tail = 0;
-                   }*/
-                   //write 30 previous data
-                fram_write_data(covar_to_fram);  
+                //write_record_header();
+                lf_hold_buffer[0] = covar_to_fram;
+                lf_record_length = 1;
             }
             if((lf_record_state == 1)&&(lf_record_state_prev == 1)){
+              if(lf_record_length < 40){
+                lf_hold_buffer[lf_record_length++] = covar_to_fram;
+              }
+              if(lf_record_length == 40){
+                write_record_header();
+                for(uint8_t hold_i = 0; hold_i < 40;hold_i++){
+                  fram_write_data(lf_hold_buffer[hold_i]);
+                }
+                lf_record_length++;
+              }
+              else if(lf_record_length > 40){
                 fram_write_data(covar_to_fram);
-                  
+              }
             }
             if((lf_record_state == 0)&&(lf_record_state_prev == 1)){
-
+              if(lf_record_length > 40){
+                fram_write_settings((uint16_t)(_fram_address_cnt>>16), 6);
+                fram_write_settings((uint16_t)(_fram_address_cnt&0xffff), 7);
+                fram_write_settings(record_number, 8);                
+              }
             } 
            
             if((lf_record_state == 0)&&(lf_record_state_prev == 0)){
-                lf_data_buffer_tail++;
-                if(lf_data_buffer_tail >= 30)lf_data_buffer_tail = 0;
+              lf_record_length = 0;                 
+              
+              //lf_data_buffer_tail++;
+              //if(lf_data_buffer_tail >= 30)lf_data_buffer_tail = 0;
             }             
               
             lf_record_state_prev = lf_record_state;
