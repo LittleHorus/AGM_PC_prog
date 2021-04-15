@@ -276,7 +276,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_visa_disconnect.clicked.connect(self.on_disconnected)
 		self.btn_save.clicked.connect(self.on_save_to_file)
 		self.btn_load_file.clicked.connect(self.on_load_from_file) 
-		self.btn_fetch.clicked.connect(self.on_fetch_data)
+		self.btn_fetch.clicked.connect(self.on_load_bin_file)
 
 		#self.meas_thread.started.connect(self.on_meas_started)
 		#self.meas_thread.finished.connect(self.on_meas_completed)
@@ -294,7 +294,7 @@ class CommonWindow(QtWidgets.QWidget):
 			self.ser.isOpen()  # try to open port
 			self.btn_visa_connect.setDisabled(True)
 			self.btn_visa_disconnect.setDisabled(False)
-			self.btnbtn_fetch_load.setDisabled(False)
+			self.btn_fetch.setDisabled(False)
 			self.btn_save.setDisabled(False)
 			self.serialDeviceConnected = True
 			self.comport_combo.setEnabled(False)
@@ -357,9 +357,7 @@ class CommonWindow(QtWidgets.QWidget):
 		#t_data_array[9] = self.slave_dir_hi
 		#t_data_array[10] = self.slave_dir_lo
 
-		#t_bytearray = str(t_data_array)
 		t_bytearray = array.array('B', t_data_array).tobytes()
-		#t_bytearray = t_bytearray[:-1]	
 		print(t_bytearray)
 		#temp_crc_full = self.calcString( "\x05\x10\x10\x00\x00\x01\x02\x00\x0a", self.INITIAL_MODBUS)
 		temp_crc_full = self.calcString( (t_bytearray), self.INITIAL_MODBUS)
@@ -409,42 +407,77 @@ class CommonWindow(QtWidgets.QWidget):
 			self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), traceback.format_exc()))	
 	def on_load_from_file(self):
 		fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')[0]
+		self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), fname))	
 		if fname:
 			try:
-				data_dict = np.load(fname, allow_pickle=True)
-				self.file_description = ""
-				self.file_data_ch1 = np.empty(0)
-				self.file_data_ch2 = np.empty(0)
-				self.file_data_pressure = np.empty(0)
-				data_items = data_dict.item()
-				self.graph.clear()
-				self.graph_pressure.clear()
-				
-				self.file_description = data_items['description']
-				self.file_data_ch1 = data_items['CH1']
-				self.file_data_ch2 = data_items['CH2']
-				self.file_data_pressure = data_items['Pressure']	
-				self.file_x_ax = data_items['Time']
-				self.data_download_done = 1
+				filename, file_extension = os.path.splitext(fname)
+				if file_extension == ".BIN" or file_extension == ".bin":
+					self.log_widget.appendPlainText("[{}] file succesful load".format(strftime("%H:%M:%S")))
+					self.graph.clear()
+					self.graph_pressure.clear()
+					data_raw = np.fromfile(fname, dtype = np.uint8)
+					data_u16 = list()
 
-				self.description_widget.clear()
-				self.description_widget.appendPlainText(self.file_description)
+					for i in range(int(len(data_raw)/2)):
+						data_u16.append((data_raw[2*i+1])+(data_raw[2*i]<<8))
+					self.trace1 = np.empty(int(len(data_u16)/2))
+					self.trace2 = np.empty(int(len(data_u16)/2))
+					for i in range(int(len(data_u16)/2)):
+						self.trace1[i] = (data_u16[2*i])
+						self.trace2[i] = (data_u16[2*i+1])
+					self.x_ax = np.linspace(0,1,int(len(data_u16)/2))
+					self.curve1 = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
+					self.curve2 = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 10)
+				else:
+					#self.log_widget.appendPlainText("[{}] wrong file type".format(strftime("%H:%M:%S")))
+					data_dict = np.load(fname, allow_pickle=True)
+					self.file_description = ""
+					self.file_data_ch1 = np.empty(0)
+					self.file_data_ch2 = np.empty(0)
+					self.file_data_pressure = np.empty(0)
+					data_items = data_dict.item()
+					self.graph.clear()
+					self.graph_pressure.clear()
+					
+					self.file_description = data_items['description']
+					self.file_data_ch1 = data_items['CH1']
+					self.file_data_ch2 = data_items['CH2']
+					self.file_data_pressure = data_items['Pressure']	
+					self.file_x_ax = data_items['Time']
+					self.data_download_done = 1
 
-				self.trace1 = self.file_data_ch1
-				self.trace2 = self.file_data_ch2
-				self.trace3 = self.file_data_pressure
-				self.x_ax = self.file_x_ax
+					self.description_widget.clear()
+					self.description_widget.appendPlainText(self.file_description)
 
-				self.curve1 = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
-				self.curve2 = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 10)
-				self.curve3 = self.graph_pressure.plot(self.x_ax,self.trace3, pen = pg.mkPen('r', width = 3), symbol = 'o', symbolSize = 10)
+					self.trace1 = self.file_data_ch1
+					self.trace2 = self.file_data_ch2
+					self.trace3 = self.file_data_pressure
+					self.x_ax = self.file_x_ax
 
-				self.btn_save.setDisabled(False)
-				self.log_widget.appendPlainText("[{}] file succesful load".format(strftime("%H:%M:%S")))
+					self.curve1 = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
+					self.curve2 = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 10)
+					self.curve3 = self.graph_pressure.plot(self.x_ax,self.trace3, pen = pg.mkPen('r', width = 3), symbol = 'o', symbolSize = 10)
+
+					self.btn_save.setDisabled(False)
+					self.log_widget.appendPlainText("[{}] file succesful load".format(strftime("%H:%M:%S")))
 			except:
 				self.log_widget.appendPlainText("[{}] file load failed".format(strftime("%H:%M:%S")))	
 				self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), traceback.format_exc()))						
 
+	def on_load_bin_file(self):
+		fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')[0]
+		self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), fname))	
+		if fname:
+			try:
+				filename, file_extension = os.path.splitext(fname)
+				if file_extension == ".BIN" or file_extension == ".bin":
+					self.log_widget.appendPlainText("[{}] file succesful load".format(strftime("%H:%M:%S")))
+				else:
+					self.log_widget.appendPlainText("[{}] wrong file type".format(strftime("%H:%M:%S")))
+				
+			except:
+				self.log_widget.appendPlainText("[{}] file load failed".format(strftime("%H:%M:%S")))	
+				self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), traceback.format_exc()))	
 	def on_interrupted(self):
 		self.meas_thread.running = False
 		
