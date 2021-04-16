@@ -276,7 +276,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_visa_disconnect.clicked.connect(self.on_disconnected)
 		self.btn_save.clicked.connect(self.on_save_to_file)
 		self.btn_load_file.clicked.connect(self.on_load_from_file) 
-		self.btn_fetch.clicked.connect(self.on_load_bin_file)
+		self.btn_fetch.clicked.connect(self.on_fetch_data)
 
 		#self.meas_thread.started.connect(self.on_meas_started)
 		#self.meas_thread.finished.connect(self.on_meas_completed)
@@ -395,9 +395,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.file_data_ch1 = self.trace1
 		self.file_data_ch2 = self.trace2
 		self.file_data_pressure = self.trace3
-
 		dict_to_save = {'description':self.file_description, 'CH1':self.file_data_ch1,'CH2':self.file_data_ch2, 'Pressure':self.file_data_pressure, 'Time': self.file_x_ax}
-		print(dict_to_save)
 		dict_filename = "{}\\milk_{}.npy".format(os.path.dirname(os.path.abspath(__file__)),name)
 		filename = "{}\\milk_{}.dat".format(os.path.dirname(os.path.abspath(__file__)),name)
 		try:
@@ -419,7 +417,7 @@ class CommonWindow(QtWidgets.QWidget):
 					data_u16 = list()
 
 					for i in range(int(len(data_raw)/2)):
-						data_u16.append((data_raw[2*i+1])+(data_raw[2*i]<<8))
+						data_u16.append((data_raw[2*i+1]<<8)+(data_raw[2*i]))
 					self.trace1 = np.empty(int(len(data_u16)/2))
 					self.trace2 = np.empty(int(len(data_u16)/2))
 					for i in range(int(len(data_u16)/2)):
@@ -464,20 +462,6 @@ class CommonWindow(QtWidgets.QWidget):
 				self.log_widget.appendPlainText("[{}] file load failed".format(strftime("%H:%M:%S")))	
 				self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), traceback.format_exc()))						
 
-	def on_load_bin_file(self):
-		fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')[0]
-		self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), fname))	
-		if fname:
-			try:
-				filename, file_extension = os.path.splitext(fname)
-				if file_extension == ".BIN" or file_extension == ".bin":
-					self.log_widget.appendPlainText("[{}] file succesful load".format(strftime("%H:%M:%S")))
-				else:
-					self.log_widget.appendPlainText("[{}] wrong file type".format(strftime("%H:%M:%S")))
-				
-			except:
-				self.log_widget.appendPlainText("[{}] file load failed".format(strftime("%H:%M:%S")))	
-				self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), traceback.format_exc()))	
 	def on_interrupted(self):
 		self.meas_thread.running = False
 		
