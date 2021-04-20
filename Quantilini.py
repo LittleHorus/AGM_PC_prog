@@ -27,6 +27,7 @@ from scipy.optimize import fsolve
 import scipy
 from scipy import signal 
 from scipy import *
+import math
 
 __version__ = '1.0.0'
 
@@ -104,46 +105,71 @@ class CommonWindow(QtWidgets.QWidget):
 		self.curve = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
 		self.curve = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 10)
 
-		xx = 0
-		yx = 0
-		zx = 0
-
-		xy = 0
-		yy = 0
-		zy = 1
-
 		zero_point = (0,0,0)
 		x_axes = (1,0,0)
 		y_axes = (0,1,0)
 		z_axes = (0,0,1)
 
-		Xdot = (xx, yx, zx)
-		Ydot = (xy, yy, zy)
-		Zdot = (1,1,1)
 		pts = np.array([(0,0,0), (0.5,0.5,1), (0.1, 0.9,-1), (0.9,0.1,-1)])
+
+		cp_yz = []
+		cp_xz = []
+		cp_xy = []
+
+		cp_xy_z45 = []
+		cp_xz_y45 = []
+
+		for i in range(101):
+			cp_xy.append((math.cos(-np.pi+2*np.pi*i/101), math.sin(-np.pi+2*np.pi*i/101), 0))
+			cp_yz.append((0, math.cos(-np.pi+2*np.pi*i/101), math.sin(-np.pi+2*np.pi*i/101)))
+			cp_xz.append((math.cos(-np.pi+2*np.pi*i/101), 0, math.sin(-np.pi+2*np.pi*i/101)))
+			cp_xy_z45.append(((math.cos(-np.pi+2*np.pi*i/101), math.sin(-np.pi+2*np.pi*i/101)/(math.sqrt(2)), math.sin(-np.pi+2*np.pi*i/101)/(math.sqrt(2)))))
+			cp_xz_y45.append(((math.sin(-np.pi+2*np.pi*i/101)/(math.sqrt(2)), math.cos(-np.pi+2*np.pi*i/101), math.sin(-np.pi+2*np.pi*i/101)/(math.sqrt(2)))))
+
+		cp_xy.append((math.cos(-np.pi+2*np.pi), math.sin(-np.pi+2*np.pi), 0))
+		cp_yz.append((0, math.cos(-np.pi+2*np.pi), math.sin(-np.pi+2*np.pi)))
+		cp_xz.append((math.cos(-np.pi+2*np.pi), 0, math.sin(-np.pi+2*np.pi)))
+		cp_xy_z45.append(((math.cos(-np.pi+2*np.pi), math.sin(-np.pi+2*np.pi)/(math.sqrt(2)), math.sin(-np.pi+2*np.pi)/(math.sqrt(2)))))
+		cp_xz_y45.append(((math.sin(-np.pi+2*np.pi)/(math.sqrt(2)), math.cos(-np.pi+2*np.pi), math.sin(-np.pi+2*np.pi)/(math.sqrt(2)))))
+		cp_array = np.asarray(cp_xy)
+		cp_array_yz = np.asarray(cp_yz)
+		cp_array_xz = np.asarray(cp_xz)
+		cp_array_xy_z45 = np.asarray(cp_xy_z45)
+		cp_array_xz_y45 = np.asarray(cp_xz_y45)
+
 
 		ptsX = np.array([(-1,0,0), x_axes])
 		ptsY = np.array([(0,-1,0), y_axes])
 		ptsZ = np.array([(0,0,-1), z_axes])
 
-		sh1 = gl.GLLinePlotItem(pos=pts, width = 2, antialias = False, mode = 'lines', color = (0.7, 0.8, 0.4, 1.0))#line_strip
+		#sh1 = gl.GLLinePlotItem(pos=pts, width = 2, antialias = False, mode = 'lines', color = (0.3, 0.8, 0.2, 1.0))#line_strip
 		gaxis = gl.GLAxisItem(size = QtGui.QVector3D(1.1,1.1,1.1), antialias = False, glOptions = 'translucent')
 
+		sh2 = gl.GLLinePlotItem(pos=cp_array, width = 2, antialias = False, mode = 'line_strip', color = (0.3, 0.8, 0.2, 1.0))
+		sh3 = gl.GLLinePlotItem(pos=cp_array_yz, width = 2, antialias = False, mode = 'line_strip', color = (0.3, 0.8, 0.2, 1.0))
+		sh4 = gl.GLLinePlotItem(pos=cp_array_xz, width = 2, antialias = False, mode = 'line_strip', color = (0.3, 0.8, 0.2, 1.0))
+		sh5 = gl.GLLinePlotItem(pos=cp_array_xy_z45, width = 2, antialias = False, mode = 'line_strip', color = (0.8, 0.2, 0.2, 1.0))
+		sh6 = gl.GLLinePlotItem(pos=cp_array_xz_y45, width = 2, antialias = False, mode = 'line_strip', color = (0.8, 0.2, 0.2, 1.0))
 		#axX = gl.GLLinePlotItem(pos=ptsX, width = 1, antialias = False, mode = 'line_strip', color = (1.0, 1.0, 0.0, 1.0))
 		#axY = gl.GLLinePlotItem(pos=ptsY, width = 1, antialias = False, mode = 'line_strip', color = (1.0, 1.0, 0.0, 1.0))
 		#axZ = gl.GLLinePlotItem(pos=ptsZ, width = 1, antialias = False, mode = 'line_strip', color = (1.0, 1.0, 0.0, 1.0))
 		self.view.addItem(gaxis)
-		self.view.addItem(sh1)
+		#self.view.addItem(sh1)
+		self.view.addItem(sh2)
+		self.view.addItem(sh3)
+		self.view.addItem(sh4)
+		self.view.addItem(sh5)
+		self.view.addItem(sh6)
 		
 		#self.view.addItem(axX)
 		#self.view.addItem(axY)
 		#self.view.addItem(axZ)
 
 		self.md = gl.MeshData.sphere(rows=20, cols=40, radius=[1])
-		self.m1 = gl.GLMeshItem(meshdata=self.md,smooth=True,color=(0.5, 0, 0.5, 0.2),shader="balloon",glOptions="additive")
+		self.m1 = gl.GLMeshItem(meshdata=self.md,smooth=True,color=(0.8, 0.8, 0.8, 0.1),shader="balloon",glOptions="additive")
 		self.view.addItem(self.m1)		
 
-		self.view.setCameraPosition(distance=10, azimuth=-90)
+		self.view.setCameraPosition(distance=8, azimuth=-90)
 		self.view.setWindowTitle('3D plot label')
 
 		vertical_size = 30
