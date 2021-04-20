@@ -20,7 +20,6 @@ from pyqtgraph.Point import Point
 import socket
 import sys
 #from requests import get
-#import bluetooth
 import qdarkstyle 
 import array
 import qutip
@@ -28,7 +27,6 @@ from scipy.optimize import fsolve
 import scipy
 from scipy import signal 
 from scipy import *
-
 
 __version__ = '1.0.0'
 
@@ -57,50 +55,44 @@ class CommonWindow(QtWidgets.QWidget):
 		self.x_ax = np.linspace(0, 1, 256)
 
 		self.fetch_enable = False
-
 		self.first_load = 0
-
 		self.count = 0
 		self.last_clicked_plot = 0
 		#pg.setConfigOption('background', 'd')
 		pg.setConfigOption('foreground', 'g')	
 		#self.label_graph = pg.LabelItem(text = "x and y", color = "CCFF00")#justify='right'
 		self.graph = pg.PlotWidget()
-		self.graph.sizeHint = lambda: pg.QtCore.QSize(100, 100)
-		#self.graph_pressure = pg.PlotWidget()
+		self.graph.sizeHint = lambda: pg.QtCore.QSize(200, 50)
 
 		self.view = gl.GLViewWidget()
 		self.view.show()
-		self.view.sizeHint = lambda: pg.QtCore.QSize(100, 100)
+		self.view.sizeHint = lambda: pg.QtCore.QSize(200, 200)
 		self.view.setSizePolicy(self.graph.sizePolicy())
-		self.xgrid = gl.GLGridItem()
-		self.ygrid = gl.GLGridItem()
-		self.zgrid = gl.GLGridItem()
+		#self.xgrid = gl.GLGridItem()
+		#self.ygrid = gl.GLGridItem()
+		#self.zgrid = gl.GLGridItem()
 
-		self.view.addItem(self.xgrid)
-		self.view.addItem(self.ygrid)
-		self.view.addItem(self.zgrid)
+		#self.view.addItem(self.xgrid)
+		#self.view.addItem(self.ygrid)
+		#self.view.addItem(self.zgrid)
 
-		self.xgrid.rotate(90,0,1,0)
-		self.ygrid.rotate(90,1,0,0)
+		#self.xgrid.rotate(90,0,1,0)
+		#self.ygrid.rotate(90,1,0,0)
 
-		self.xgrid.scale(0.2, 0.1, 0.1)
-		self.ygrid.scale(0.2, 0.1, 0.1)
-		self.zgrid.scale(0.1, 0.2, 0.1)
+		#self.xgrid.scale(0.2, 0.1, 0.1)
+		#self.ygrid.scale(0.2, 0.1, 0.1)
+		#self.zgrid.scale(0.1, 0.2, 0.1)
 
 		self.lastClicked = []
-		#PlotCurveItem   PlotWidget
+
 		self.graph.showGrid(1,1,1)
-		#self.graph_pressure.showGrid(1,1,1)
+
 		self.plot_xaxis = list()
 		self.index = 0
 		self.graph.setLabel('bottom', "Time, sec")
-		#self.graph_pressure.setLabel("bottom", "Time, sec")
 		#self.graph.setLabel('top', self.label_graph)
 		#self.graph.showLabel(show = True)
 		self.graph.setMinimumSize(500,200)
-		#self.graph_pressure.setMinimumSize(500, 200)
-		
 		self.vb = self.graph.plotItem.vb
 
 		#self.vLine = pg.InfiniteLine(angle=90, movable=False, pen = pg.mkPen('y', width = 1))
@@ -108,11 +100,9 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.graph.addItem(self.vLine, ignoreBounds=True)
 		#self.graph.addItem(self.hLine, ignoreBounds=True)
 		#self.graph.setRange(yRange = (0,4095))
-		#self.graph_pressure.setRange(yRange = (0,100))
 
 		self.curve = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
 		self.curve = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 10)
-		#self.curve_pressure = self.graph_pressure.plot(self.x_ax,self.trace3, pen = pg.mkPen('r', width = 3), symbol = 'o', symbolSize = 10)
 
 		xx = 0
 		yx = 0
@@ -122,20 +112,39 @@ class CommonWindow(QtWidgets.QWidget):
 		yy = 0
 		zy = 1
 
+		zero_point = (0,0,0)
+		x_axes = (1,0,0)
+		y_axes = (0,1,0)
+		z_axes = (0,0,1)
+
 		Xdot = (xx, yx, zx)
 		Ydot = (xy, yy, zy)
 		Zdot = (1,1,1)
-		pts = np.array([Xdot, Ydot])
-		sh1 = gl.GLLinePlotItem(pos=pts, width = 4, antialias = False, mode = 'line_strip', color = (0.0, 1.0, 0.0, 1.0))
-		self.view.addItem(sh1)
+		pts = np.array([(0,0,0), (0.5,0.5,1), (0.1, 0.9,-1), (0.9,0.1,-1)])
 
-		self.md = gl.MeshData.sphere(rows=20, cols=40,radius=[1])
+		ptsX = np.array([(-1,0,0), x_axes])
+		ptsY = np.array([(0,-1,0), y_axes])
+		ptsZ = np.array([(0,0,-1), z_axes])
+
+		sh1 = gl.GLLinePlotItem(pos=pts, width = 2, antialias = False, mode = 'lines', color = (0.7, 0.8, 0.4, 1.0))#line_strip
+		gaxis = gl.GLAxisItem(size = QtGui.QVector3D(1.1,1.1,1.1), antialias = False, glOptions = 'translucent')
+
+		#axX = gl.GLLinePlotItem(pos=ptsX, width = 1, antialias = False, mode = 'line_strip', color = (1.0, 1.0, 0.0, 1.0))
+		#axY = gl.GLLinePlotItem(pos=ptsY, width = 1, antialias = False, mode = 'line_strip', color = (1.0, 1.0, 0.0, 1.0))
+		#axZ = gl.GLLinePlotItem(pos=ptsZ, width = 1, antialias = False, mode = 'line_strip', color = (1.0, 1.0, 0.0, 1.0))
+		self.view.addItem(gaxis)
+		self.view.addItem(sh1)
+		
+		#self.view.addItem(axX)
+		#self.view.addItem(axY)
+		#self.view.addItem(axZ)
+
+		self.md = gl.MeshData.sphere(rows=20, cols=40, radius=[1])
 		self.m1 = gl.GLMeshItem(meshdata=self.md,smooth=True,color=(0.5, 0, 0.5, 0.2),shader="balloon",glOptions="additive")
 		self.view.addItem(self.m1)		
 
 		self.view.setCameraPosition(distance=10, azimuth=-90)
 		self.view.setWindowTitle('3D plot label')
-
 
 		vertical_size = 30
 		horizontal_size = 80
@@ -146,7 +155,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_load_file.setMaximumSize(80,60)
 		self.btn_load_file.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
 
-			
 		self.data_fetch_timeout = QtWidgets.QLineEdit("001")
 		self.data_fetch_timeout.setMaximumSize(horizontal_size,vertical_size)
 		self.data_fetch_timeout.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
@@ -161,36 +169,62 @@ class CommonWindow(QtWidgets.QWidget):
 		self.description_widget.insertPlainText("File description: ")
 		self.description_widget.setReadOnly(False)				
 
-
 		self.btn_fetch = QtWidgets.QPushButton("&Fetch")
 		self.btn_fetch.setMaximumSize(horizontal_size,vertical_size)
 		self.btn_fetch.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
 
 		self.btn_save = QtWidgets.QPushButton("&Save")
 		self.btn_save.setMaximumSize(horizontal_size,vertical_size)
-		self.btn_save.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)		
+		self.btn_save.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
+
+		self.table = QtWidgets.QTableWidget(self)
+		self.table.setColumnCount(5)
+		self.table.setRowCount(10)
+		self.table.setHorizontalHeaderLabels(["Header 1", "Header 2", "Header3", "Header 4", ""])
+		self.table.horizontalHeaderItem(0).setToolTip("Column 1")
+		self.table.horizontalHeaderItem(0).setTextAlignment(Qt.AlignCenter)
+		self.table.horizontalHeaderItem(1).setTextAlignment(Qt.AlignCenter)
+		self.table.horizontalHeaderItem(2).setTextAlignment(Qt.AlignCenter)
+		self.table.horizontalHeaderItem(3).setTextAlignment(Qt.AlignCenter)
+		self.table.horizontalHeaderItem(4).setTextAlignment(Qt.AlignCenter)
+		#self.table.resizeColumnsToContents()
+
+		self.table.setColumnWidth(0, 200)
+		self.table.setColumnWidth(1, 200)
+		self.table.setColumnWidth(2, 200)
+		self.table.setColumnWidth(3, 200)
+		self.table.setColumnWidth(4, 200)
+
+		self.table.setMinimumWidth(400)
+		self.table.setMaximumWidth(2000)
+		self.table.setMinimumHeight(200)
+		self.table.setMaximumHeight(400)
+
+		self.table_header = self.table.horizontalHeader()
+		#self.table_header.setResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+		self.table_header.setStretchLastSection(True)
 		
 		self.grid = QtWidgets.QGridLayout()
 		self.grid_2 = QtWidgets.QGridLayout()
 		self.grid_plot_labels = QtWidgets.QGridLayout()
 
-		self.grid.addWidget(self.btn_fetch,0,0)
-		self.grid.addWidget(self.btn_save,0,1)
-		self.grid.addWidget(self.btn_load_file, 0,2)
-		self.grid.addWidget(self.data_fetch_timeout, 0,3)
+		self.grid.addWidget(self.btn_fetch, 0, 0)
+		self.grid.addWidget(self.btn_save, 0, 1)
+		self.grid.addWidget(self.btn_load_file, 0, 2)
+		self.grid.addWidget(self.data_fetch_timeout, 0, 3)
 
-		self.grid.addWidget(self.description_widget, 3,0,4,5)
+		self.grid.addWidget(self.description_widget, 3, 0, 4, 5)
 		self.grid.addWidget(self.log_widget, 8, 0, 7, 5)
 
-		self.grid.addWidget(QtWidgets.QLabel(""),15,0)
-		self.grid.addWidget(QtWidgets.QLabel(""),15,1)
-		self.grid.addWidget(QtWidgets.QLabel(""),15,2)
-		self.grid.addWidget(QtWidgets.QLabel(""),15,3)
+		self.grid.addWidget(QtWidgets.QLabel(""), 15, 0)
+		self.grid.addWidget(QtWidgets.QLabel(""), 15, 1)
+		self.grid.addWidget(QtWidgets.QLabel(""), 15, 2)
+		self.grid.addWidget(QtWidgets.QLabel(""), 15, 3)
 		
-		self.grid_2.addWidget(QtWidgets.QLabel(""),13,0)
-		self.grid_2.addWidget(QtWidgets.QLabel(""),13,1)
-		self.grid_2.addWidget(QtWidgets.QLabel(""),13,2)
-		self.grid_2.addWidget(QtWidgets.QLabel(""),13,3)
+		self.grid_2.addWidget(QtWidgets.QLabel(""), 13, 0)
+		self.grid_2.addWidget(QtWidgets.QLabel(""), 13, 1)
+		self.grid_2.addWidget(QtWidgets.QLabel(""), 13, 2)
+		self.grid_2.addWidget(QtWidgets.QLabel(""), 13, 3)
 				
 		self.vbox_1 = QtWidgets.QVBoxLayout()
 		self.vbox_1.insertLayout(0,self.grid)
@@ -202,10 +236,11 @@ class CommonWindow(QtWidgets.QWidget):
 
 		self.vbox_graph_table.addWidget(self.graph)
 		self.vbox_graph_table.addWidget(self.view)
-		self.vbox_graph_table.insertStretch(2,0)
+		self.vbox_graph_table.addWidget(self.table)
+		self.vbox_graph_table.insertStretch(3,0)
 		self.hbox.insertLayout(0,self.vbox_1)
 		self.hbox.insertLayout(1,self.vbox_graph_table)
-	
+		
 		self.hbox_2 = QtWidgets.QHBoxLayout()
 
 		self.hbox_2.insertSpacing(0,335)
@@ -224,6 +259,9 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_save.clicked.connect(self.on_save_to_file)
 		self.btn_load_file.clicked.connect(self.on_load_from_file) 
 		self.btn_fetch.clicked.connect(self.on_fetch_data)
+
+		#self.table_widget = tableWidget(self)
+		#self.setCentralWidget(self.table_widget)
 
 	def on_fetch_data(self):
 		if self.fetch_enable == True:
@@ -258,7 +296,6 @@ class CommonWindow(QtWidgets.QWidget):
 				if file_extension == ".BIN" or file_extension == ".bin":
 					self.log_widget.appendPlainText("[{}] file succesful load".format(strftime("%H:%M:%S")))
 					self.graph.clear()
-					#self.graph_pressure.clear()
 					data_raw = np.fromfile(fname, dtype = np.uint8)
 					data_u16 = list()
 
@@ -273,7 +310,6 @@ class CommonWindow(QtWidgets.QWidget):
 					self.curve1 = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
 					self.curve2 = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 10)
 				else:
-					#self.log_widget.appendPlainText("[{}] wrong file type".format(strftime("%H:%M:%S")))
 					data_dict = np.load(fname, allow_pickle=True)
 					self.file_description = ""
 					self.file_data_ch1 = np.empty(0)
@@ -281,7 +317,6 @@ class CommonWindow(QtWidgets.QWidget):
 					self.file_data_pressure = np.empty(0)
 					data_items = data_dict.item()
 					self.graph.clear()
-					#self.graph_pressure.clear()
 					
 					self.file_description = data_items['description']
 					self.file_data_ch1 = data_items['CH1']
@@ -300,7 +335,6 @@ class CommonWindow(QtWidgets.QWidget):
 
 					self.curve1 = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
 					self.curve2 = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 10)
-					#self.curve3 = self.graph_pressure.plot(self.x_ax,self.trace3, pen = pg.mkPen('r', width = 3), symbol = 'o', symbolSize = 10)
 
 					self.btn_save.setDisabled(False)
 					self.log_widget.appendPlainText("[{}] file succesful load".format(strftime("%H:%M:%S")))
@@ -324,7 +358,7 @@ class CommonWindow(QtWidgets.QWidget):
 
 class tableWidget(QtWidgets.QWidget):
 	def __init__(self, parent):
-		super(QWidget, self).__init__(parent)
+		super(QtWidgets.QWidget, self).__init__(parent)
 		self.layout = QtWidgets.QVBoxLayout(self)
 
 		self.tabs = QtWidgets.QTabWidget()
