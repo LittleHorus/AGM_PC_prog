@@ -24,6 +24,10 @@ import sys
 import qdarkstyle 
 import array
 import qutip
+from scipy.optimize import fsolve
+import scipy
+from scipy import signal 
+from scipy import *
 
 
 __version__ = '1.0.0'
@@ -34,22 +38,6 @@ class CommonWindow(QtWidgets.QWidget):
 	#QtWidgets.QWidget
 	def __init__(self, parent = None):
 		QtWidgets.QMainWindow.__init__(self, parent)
-
-		self.slave_address = 0x05
-		self.slave_register = 0x10
-		self.slave_register_address_hi = 0x10
-		self.slave_register_address_lo = 0x00
-		self.slave_register_count_hi = 0x00
-		self.slave_register_count_lo = 0x02
-		self.slave_byte_count = 0x04
-		self.slave_speed_hi = 0x00
-		self.slave_speed_lo = 0x0a
-		self.slave_dir_hi = 0x00
-		self.slave_dir_lo = 0x09 
-		self.slave_crc16_lo = 0x00
-		self.slave_crc16_hi = 0x00
-		self.data_array = [0]*13#length of packet
-		self.data_bytearray = bytearray(self.data_array)
 
 		self.serialDeviceConnected = False
 		self.file_description = ""
@@ -71,8 +59,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.fetch_enable = False
 
 		self.first_load = 0
-		self.previous_row = 0
-		self.current_row = -1
 
 		self.count = 0
 		self.last_clicked_plot = 0
@@ -117,11 +103,11 @@ class CommonWindow(QtWidgets.QWidget):
 		
 		self.vb = self.graph.plotItem.vb
 
-		self.vLine = pg.InfiniteLine(angle=90, movable=False, pen = pg.mkPen('y', width = 1))
-		self.hLine = pg.InfiniteLine(angle=0, movable=False, pen = pg.mkPen('y', width = 1))
-		self.graph.addItem(self.vLine, ignoreBounds=True)
-		self.graph.addItem(self.hLine, ignoreBounds=True)
-		self.graph.setRange(yRange = (0,4095))
+		#self.vLine = pg.InfiniteLine(angle=90, movable=False, pen = pg.mkPen('y', width = 1))
+		#self.hLine = pg.InfiniteLine(angle=0, movable=False, pen = pg.mkPen('y', width = 1))
+		#self.graph.addItem(self.vLine, ignoreBounds=True)
+		#self.graph.addItem(self.hLine, ignoreBounds=True)
+		#self.graph.setRange(yRange = (0,4095))
 		#self.graph_pressure.setRange(yRange = (0,100))
 
 		self.curve = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
@@ -150,12 +136,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.view.setCameraPosition(distance=10, azimuth=-90)
 		self.view.setWindowTitle('3D plot label')
 
-		self.ComPort = str
-		self.comport_combo = QtWidgets.QComboBox()
-		self.comport_combo.addItems([""])
-		self.comport_combo.addItems(["Refresh"])
-		self.comport_combo.activated[str].connect(self.on_activated_com_list)
-		self.comport_combo.activated[str].connect(self.ComPort)
 
 		vertical_size = 30
 		horizontal_size = 80
@@ -166,16 +146,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_load_file.setMaximumSize(80,60)
 		self.btn_load_file.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
 
-		self.label_visa_connect = QtWidgets.QLabel("COM port:")
-		self.label_visa_connect.setMaximumSize(horizontal_size,vertical_size)
-		self.label_visa_connect.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
-		self.btn_visa_connect = QtWidgets.QPushButton("Connect")
-		self.btn_visa_connect.setMaximumSize(horizontal_size,vertical_size)
-		self.btn_visa_connect.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
-		self.btn_visa_disconnect = QtWidgets.QPushButton("Disconnect")
-		self.btn_visa_disconnect.setMaximumSize(horizontal_size,vertical_size)
-		self.btn_visa_disconnect.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
-		self.btn_visa_disconnect.setDisabled(True)
 			
 		self.data_fetch_timeout = QtWidgets.QLineEdit("001")
 		self.data_fetch_timeout.setMaximumSize(horizontal_size,vertical_size)
@@ -191,9 +161,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.description_widget.insertPlainText("File description: ")
 		self.description_widget.setReadOnly(False)				
 
-		self.timeout_label = QtWidgets.QLabel("Timeout(ms):")
-		self.timeout_label.setMaximumSize(horizontal_size,vertical_size)
-		self.timeout_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
 
 		self.btn_fetch = QtWidgets.QPushButton("&Fetch")
 		self.btn_fetch.setMaximumSize(horizontal_size,vertical_size)
@@ -207,16 +174,10 @@ class CommonWindow(QtWidgets.QWidget):
 		self.grid_2 = QtWidgets.QGridLayout()
 		self.grid_plot_labels = QtWidgets.QGridLayout()
 
-		self.grid.addWidget(self.label_visa_connect, 0, 0)
-		self.grid.addWidget(self.comport_combo, 0, 1)
-		self.grid.addWidget(self.btn_visa_connect, 0, 2)
-		self.grid.addWidget(self.btn_visa_disconnect, 0, 3)
-		
-		self.grid.addWidget(self.timeout_label, 1, 3)
-		self.grid.addWidget(self.btn_fetch,2,0)
-		self.grid.addWidget(self.btn_save,2,1)
-		self.grid.addWidget(self.btn_load_file, 2,2)
-		self.grid.addWidget(self.data_fetch_timeout, 2,3)
+		self.grid.addWidget(self.btn_fetch,0,0)
+		self.grid.addWidget(self.btn_save,0,1)
+		self.grid.addWidget(self.btn_load_file, 0,2)
+		self.grid.addWidget(self.data_fetch_timeout, 0,3)
 
 		self.grid.addWidget(self.description_widget, 3,0,4,5)
 		self.grid.addWidget(self.log_widget, 8, 0, 7, 5)
@@ -260,110 +221,15 @@ class CommonWindow(QtWidgets.QWidget):
 
 		self.meas_thread = evThread()
 
-		self.btn_visa_connect.clicked.connect(self.on_connected)
-		self.btn_visa_connect.clicked.connect(self.on_get_current_path)
-		self.btn_visa_disconnect.clicked.connect(self.on_disconnected)
 		self.btn_save.clicked.connect(self.on_save_to_file)
 		self.btn_load_file.clicked.connect(self.on_load_from_file) 
 		self.btn_fetch.clicked.connect(self.on_fetch_data)
-
-	def on_connected(self):
-		try:
-			self.ser = serial.Serial(self.ComPort, baudrate=115200, bytesize=serial.EIGHTBITS,
-									 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 0.1)
-			self.ser.isOpen()  # try to open port
-			self.btn_visa_connect.setDisabled(True)
-			self.btn_visa_disconnect.setDisabled(False)
-			self.btn_fetch.setDisabled(False)
-			self.btn_save.setDisabled(False)
-			self.serialDeviceConnected = True
-			self.comport_combo.setEnabled(False)
-			self.log_widget.appendPlainText("[{}] Connected to {}".format(strftime("%H:%M:%S"), self.ComPort))
-		except IOError:
-			#print("Port already open another programm")
-			self.log_widget.appendPlainText("[{}] Port {} already open another programm".format(strftime("%H:%M:%S"), self.ComPort))
-		except serial.SerialException:
-			#print("SerialException")
-			self.log_widget.appendPlainText("[{}] SerialException".format(strftime("%H:%M:%S")))
-		except Exception:
-			#print("Unexpected error, Null ComName")
-			self.log_widget.appendPlainText("[{}] unexpected error".format(strftime("%H:%M:%S")))
-	def on_disconnected(self):
-		self.btn_visa_connect.setDisabled(False)
-		self.btn_visa_disconnect.setDisabled(True)	
-		self.btn_fetch.setDisabled(True)
-		self.btn_save.setDisabled(True)
-		self.serialDeviceConnected = False
-		self.comport_combo.setEnabled(True)
-		self.log_widget.appendPlainText("[{}] Disconnected".format(strftime("%H:%M:%S")))
-		try:	
-			self.ser.close()
-		except:
-			#print("serial port close exception, on_disconnect --traceback")
-			self.log_widget.appendPlainText("[{}] error, device session lost".format(strftime("%H:%M:%S")))
-		#print("Disconnected")
-			
-	def on_activated_com_list(self, str):
-		if self.comport_combo.currentText() == "" or self.serialDeviceConnected == True:
-			self.btn_visa_connect.setDisabled(True)
-		elif self.comport_combo.currentText() == "Refresh":
-			self.btn_visa_connect.setDisabled(True)
-			self.comport_combo.clear()
-			self.comport_combo.addItems([""])
-			self.comport_combo.addItems(["Refresh"])
-			self.comport_combo.addItems(serial_ports())
-		else:
-			self.ComPort = str
-			self.btn_visa_connect.setDisabled(False)
 
 	def on_fetch_data(self):
 		if self.fetch_enable == True:
 			self.fetch_enable = False
 		else:
 			self.fetch_enable = True
-	def on_send_to_timer(self):
-		#self.slave_speed_lo = 0x00
-		#self.slave_speed_hi = 0x00
-		t_data_array = [0]*9
-		t_data_array[0] = self.slave_address
-		t_data_array[1] = self.slave_register
-		t_data_array[2] = 0x06
-		t_data_array[3] = 0x7F
-		t_data_array[4] = 0x00
-		t_data_array[5] = 0x01
-		t_data_array[6] = 0x02
-		t_data_array[7] = 0x00
-		t_data_array[8] = 0x0a
-		#t_data_array[9] = self.slave_dir_hi
-		#t_data_array[10] = self.slave_dir_lo
-
-		t_bytearray = array.array('B', t_data_array).tobytes()
-		print(t_bytearray)
-		#temp_crc_full = self.calcString( "\x05\x10\x10\x00\x00\x01\x02\x00\x0a", self.INITIAL_MODBUS)
-		temp_crc_full = self.calcString( (t_bytearray), self.INITIAL_MODBUS)
-		u16_crc16 = int(temp_crc_full)
-		print(temp_crc_full)
-		#u16_crc_reverse = ((u16_crc16<<8)&0xff00) | ((u16_crc16>>8)&0xff)
-		self.slave_crc16_lo = ((u16_crc16)&0xff)
-		self.slave_crc16_hi = ((u16_crc16>>8)&0xff)
-		print("lo - {:02X} hi - {:02X}".format(self.slave_crc16_lo, self.slave_crc16_hi))
-		print("lo - {} hi - {}".format(self.slave_crc16_lo, self.slave_crc16_hi))
-		self.data_array[0] = t_data_array[0]
-		self.data_array[1] = t_data_array[1]
-		self.data_array[2] = t_data_array[2]
-		self.data_array[3] = t_data_array[3]
-		self.data_array[4] = t_data_array[4]
-		self.data_array[5] = t_data_array[5]
-		self.data_array[6] = t_data_array[6]
-		self.data_array[7] = t_data_array[7]
-		self.data_array[8] = t_data_array[8]
-		#self.data_array[9] = self.slave_dir_hi
-		#self.data_array[10] = self.slave_dir_lo
-		self.data_array[9] = self.slave_crc16_lo
-		self.data_array[10] = self.slave_crc16_hi
-		self.data_bytearray = bytearray(self.data_array)
-		print(self.data_bytearray)
-		self.ser.write(self.data_bytearray)	
 
 	def on_get_current_path(self):
 		print(os.path.dirname(os.path.abspath(__file__)))	
@@ -445,31 +311,9 @@ class CommonWindow(QtWidgets.QWidget):
 	def on_interrupted(self):
 		self.meas_thread.running = False
 		
-	def on_display_record(self):
-		self.graph.clear()
-		self.record_number = self.current_row + 1
-		self.cursor_trigger = 0
-		self.xpos = 0
-		self.ypos = 0
-		#self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
-		#self.graph.enableAutoRange(ViewBox.YAxis, enable=False)
-		#self.graph.enableAutoRange(ViewBox.XAxis, enable=True)
-		self.graph.showGrid(1,1,1)
-		self.graph.addItem(self.vLine, ignoreBounds=True)
-		self.graph.addItem(self.hLine, ignoreBounds=True)	
-		self.plot_xaxis = list()
-		for i in range(len(self.parsed_data_list[self.current_row])):
-			self.plot_xaxis.append(i*self.record_sampling_time)
-
-		self.curve = self.graph.plot(self.plot_xaxis,self.parsed_data_list[self.current_row], pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10, title = "Record №{}".format(self.record_number))
-		self.curve.curve.setClickable(True)
-
-		self.curve.sigPointsClicked.connect(self.clicked_point)	
-
 	def closeEvent(self, event):#перехватываем событие закрытия приложения
 		result = QtWidgets.QMessageBox.question(self, "Подтверждение закрытия окна", "Вы действительно хотите закрыть окно?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
 		if result == QtWidgets.QMessageBox.Yes:
-		
 			self.hide()
 			#self.pwindow.close()
 			self.meas_thread.running = False
@@ -477,76 +321,39 @@ class CommonWindow(QtWidgets.QWidget):
 			event.accept()
 		else:
 			event.ignore()
-		
-	def clicked_point(self, plot, points):
-		global lastClicked
-		if self.last_clicked_plot == self.current_row:
-			try:
-				for p in self.lastClicked:
-					p.resetPen()
-			except:
-				pass
-		if self.last_clicked_plot != self.current_row:
-			self.cursor_trigger = 0
-		if self.cursor_trigger == 0:
-			self.xpos = int(points[0].pos()[0]/self.record_sampling_time)
-			self.ypos = int(points[0].pos()[1])
-			#self.label_cord.setText("X pos: {:03d} Y pos: {:04d} Time: {:0.2f}sec".format(self.xpos, self.ypos, self.xpos*self.record_sampling_time))
 
-			for p in points:
-				p.setPen(pg.mkPen(color='r', width=4))  #'r', width=5)
-		self.lastClicked = points
-		self.last_clicked_plot = self.current_row	
-		self.cursor_trigger += 1
-		if self.cursor_trigger >= 2:
-			self.cursor_trigger = 0
+class tableWidget(QtWidgets.QWidget):
+	def __init__(self, parent):
+		super(QWidget, self).__init__(parent)
+		self.layout = QtWidgets.QVBoxLayout(self)
 
-		self.vLine.setPos(points[0].pos()[0])
-		try:
-			self.hLine.setPos(self.parsed_data_list[self.current_row][self.xpos])
-		except:
-			pass#print("x pos out of range")
-	def crc16(self, data: bytes, poly=0xa001):
-	    '''
-	    CRC-16-CCITT Algorithm
-	    '''
-	    data = bytearray(data)
-	    crc = 0xFFFF
-	    for b in data:
-	        cur_byte = 0xFF & b
-	        for _ in range(0, 8):
-	            if (crc & 0x0001) ^ (cur_byte & 0x0001):
-	                crc = (crc >> 1) ^ poly
-	            else:
-	                crc >>= 1
-	            cur_byte >>= 1
-	    crc = (~crc & 0xFFFF)
-	    crc = (crc << 8) | ((crc >> 8) & 0xFF)
-	    
-	    return crc & 0xFFFF			
-	def calcByte(self, ch, crc):
-	    """Given a new Byte and previous CRC, Calc a new CRC-16"""
-	    if type(ch) == type("c"):
-	        by = ord( ch)
-	    else:
-	        by = ch
-	    crc = (crc >> 8) ^ self.table[(crc ^ by) & 0xFF]
-	    return (crc & 0xFFFF)
+		self.tabs = QtWidgets.QTabWidget()
+		self.tab1 = QtWidgets.QWidget()
+		self.tab2 = QtWidgets.QWidget()
+		self.tab3 = QtWidgets.QWidget()
+		self.tabs.resize(300,200)
 
-	def calcString(self, st, crc):
-	    """Given a binary string and starting CRC, Calc a final CRC-16 """
-	    for ch in st:
-	        crc = (crc >> 8) ^ self.table[(crc ^ (ch)) & 0xFF] #ord(ch) 
-	    return crc
+		self.tabs.addTab(self.tab1, "AW File")
+		self.tabs.addTab(self.tab2, "tab2")
+		self.tabs.addTab(self.tab3, "tab3")
+
+		self.tab1.layout = QtWidgets.QVBoxLayout(self)
+		self.tab2.layout = QtWidgets.QVBoxLayout(self)
+
+		self.tab2_label_info = QtWidgets.QLabel("Info label")
+
+		self.tab2.layout.addWidget(self.tab2_label_info)
+
+		self.layout.addWidget(self.tabs)
+		self.setLayout(self.layout)
+
 class evThread(QtCore.QThread):
-	
 	status_signal = QtCore.pyqtSignal(str)
 	dataplot = QtCore.pyqtSignal(np.ndarray)
 	progress = QtCore.pyqtSignal(int)
 	def __init__(self, parent = None):
 		QtCore.QThread.__init__(self,parent)
 		self.running = False
-		
 	def run(self):
 		self.running = True
 		for i in range(25):
@@ -555,15 +362,12 @@ class evThread(QtCore.QThread):
 				self.status_signal.emit("{} / {}".format(i+1,100))
 				self.dataplot.emit(np.random.randn(200,))
 				self.progress.emit(4*i+4)
-				
 		if self.running == False:
 			self.status_signal.emit("Interrupted")
-		
 class ppData:
 	"""this class will be used for post processing of data"""
 	def __init__(self, parent = None):
 		dataFromFile = (list)
-
 
 def serial_ports():
 	""" Lists serial port names
@@ -602,17 +406,14 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)		
 
 if __name__ == '__main__':
-	import sys
-	import time, math
-
 	app =QtWidgets.QApplication(sys.argv)
 	ex = CommonWindow()
 	ex.setFont(QtGui.QFont('Arial', 9))#, QtGui.QFont.Bold
-	ex.setWindowTitle("Milk fetch ver 1.0.0")
+	ex.setWindowTitle("Quantilini ver 1.0.0")
 	#app.setStyle('Fusion')
 	app.setStyleSheet ( qdarkstyle . load_stylesheet ())
 	#ex.setWindowFlags(ex.windowFlags() | QtCore.Qt.FramelessWindowHint)
-	ex.comport_combo.addItems(serial_ports())
+	#ex.comport_combo.addItems(serial_ports())
 	#ex.setFixedSize(500,400)
 	#ex.resize(300,200)
 	ex.adjustSize()
