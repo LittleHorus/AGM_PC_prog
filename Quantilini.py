@@ -432,9 +432,35 @@ class ppData:
 class Transmon_Functions():
 	def __init__(self, parent = None):
 		self.tlist = np.linspace(0,300,6000)
+		self.dd = 0.15# assymetry of JJs
+		self.ng = 0.5# charge displacement
 		self.dt = tlist[1] - tlist[0]
-		self.SIZE_CHARGE = 95
-		self.SIZE_Ph_Res = 1
+		self.SIZE_CHARGE = 95# size of charge basis
+		self.SIZE_Ph_Res = 1# size of Fock+state basis for the resonator
+		self.N_qb_max = 4#maximum of qubit's states taken into account, truncation operation
+		self.betta_res = 0.5# relation of capacitances Cgate/Csum
+
+		self.EC= 0.38
+		self.EJEC = 38
+		self.flux = 1
+		self.wr = 7.757
+		self.VRES = 0.08
+		self.Id_a = qeye(self.SIZE_Ph_Res)
+		self.kappa = 1e-2 
+		self.coupling = 1e-4
+		self.dephas = 1e-4
+		self.Temperature = 60e-3
+		self.System= Qubit_Cavity_define(EC,EJEC,flux,wr,VRES,Temperature)
+		self.System_ref=Qubit_Cavity_define_without_Temp(EC,EJEC,flux,wr,VRES,Temperature)
+		self.H0=System['Hamiltonian']
+		self.Energies=System['Energies and states'][0]
+		self.States=System['Energies and states'][1]
+		self.Transmon_states=System['Transmon states']
+		self.operator_bos=System['Operators photon']
+		self.qubit_oper=System['Operator charge number']
+		self.Energia_transmo=System['Transmon energies']
+		self.gres=System['Couplings g01,g12']
+
 
 	def Nstate(self, Nbas, Npho):
 		#creates FOCK state-vector
@@ -798,6 +824,389 @@ class Transmon_Functions():
 		Output['Transmon energies']=Eigenenergies_transmon
 
 		return (Output)
+	def Collapse(self, System, Temperature, coupling, dephas):
+		cops_list = []
+		T=Temperature
+		ff01 = System['f01']
+		ff02 = System['f02']
+		ff03 = System['f03']
+
+		ff12 = ff02-ff01
+		ff23 = ff03-ff02
+		ff13 = ff03-ff01
+
+		nth10=(np.exp(-h*ff01*1e9/kb/T))/(1-np.exp(-h*ff01*1e9/kb/T))
+		nth20=(1-np.exp(-h*ff02*1e9/kb/T))**(-1)*(np.exp(-h*ff02*1e9/kb/T))
+		nth30=(1-np.exp(-h*ff03*1e9/kb/T))**(-1)*(np.exp(-h*ff03*1e9/kb/T))
+		nth12=(1-np.exp(-h*ff12*1e9/kb/T))**(-1)*(np.exp(-h*ff12*1e9/kb/T))
+		nth13=(1-np.exp(-h*ff13*1e9/kb/T))**(-1)*(np.exp(-h*ff13*1e9/kb/T))
+		nth23=(1-np.exp(-h*ff23*1e9/kb/T))**(-1)*(np.exp(-h*ff23*1e9/kb/T))
+
+		gnd=System['Transmon states'][0]
+		exc=System['Transmon states'][1]
+		fer=System['Transmon states'][2]
+		dex=System['Transmon states'][3]
+		a=System['Operators photon']
+
+		s_10=tensor(gnd*exc.dag(),Id_a)
+		s_20=tensor(gnd*fer.dag(),Id_a)
+		s_30=tensor(gnd*dex.dag(),Id_a)
+
+		s_12=tensor(exc*fer.dag(),Id_a)
+		s_13=tensor(exc*dex.dag(),Id_a)
+		s_23=tensor(fer*dex.dag(),Id_a)
+
+		s_11=tensor(exc*exc.dag()-gnd*gnd.dag(),Id_a)
+		s_22=tensor(fer*fer.dag()-exc*exc.dag(),Id_a)
+		s_33=tensor(dex*dex.dag()-fer*fer.dag(),Id_a)
+
+		gam_10=coupling
+		gam_20=coupling
+		gam_30=coupling
+		gam_12=2*coupling
+		gam_13=coupling
+		gam_23=coupling
+		gam_11=dephas
+		gam_22=dephas
+		gam_33=dephas
+
+		rate01_0=np.sqrt(gam_10*(nth10+1))*s_10
+		rate01_1=np.sqrt(gam_10*(nth10))*s_10.dag()
+		cops_list.append(rate01_0)
+		cops_list.append(rate01_1)
+
+		rate12_0=np.sqrt(gam_12*(nth12+1))*s_12
+		rate12_1=np.sqrt(gam_12*(nth12))*s_12.dag()
+		cops_list.append(rate12_0)
+		cops_list.append(rate12_1)
+
+		rate11=0*np.sqrt(gam_11*(2*nth10+1))*s_11
+		rate22=0*np.sqrt(gam_22*(2*nth20+1))*s_22
+
+		cops_list.append(rate11)
+		cops_list.append(rate22)
+
+		rate_res=np.sqrt(kappa)*a
+		cops_list.append(rate_res)
+
+		return cops_list
+
+	def Qubit_dynamics(self, System,Initial_state,probe,excite,DM_flag):
+		H0=System['Hamiltonian']
+		operator_boson=System['Operators photon']
+		operator_qubit=System['Operator charge number']
+		collapse=System['Collapse operators']
+
+		A=operator_boson
+		Ad=operator_boson.dag()
+		Hprobe1=A
+		Hprobe2=Ad
+
+		Hpr1=[Hprobe1,probe[0]]
+		Hpr2=[Hprobe2,probe[1]]
+
+		Hgt1=[operator_qubit,excite[0]]
+		Hgt2=[operator_qubit,excite[1]]
+
+		# collapse operator
+		c_ops=collapse
+		H=[H0,Hpr1,Hpr2,Hgt1,Hgt2] #full Hamiltonian
+		psi0=Initial_state
+		opts = Options()
+
+		opts.store_states=DM_flag
+		opts.store_final_state=DM_flag
+		GND_p=tensor(Transmon_states[0]*Transmon_states[0].dag(),Id_a)
+		EXC_p=tensor(Transmon_states[1]*Transmon_states[1].dag(),Id_a)
+		FER_p=tensor(Transmon_states[2]*Transmon_states[2].dag(),Id_a)
+
+		N_A=Ad*A
+		exp_ops=[N_A,GND_p,EXC_p,FER_p,A+A.dag(),A.dag()-A]
+		result0=mesolve(H,psi0,tlist,c_ops,exp_ops,options=opts)
+
+		Dynamika={}
+		Dynamika['<$N_a$>']=result0.expect[0]
+		Dynamika['<$p_{gg}$>']=result0.expect[1]
+		Dynamika['<$p_{ee}$>']=result0.expect[2]
+		Dynamika['<$p_{ff}$>']=result0.expect[3]
+		Dynamika['<$a+adag$>']=result0.expect[4]
+		Dynamika['<$a-adag$>']=result0.expect[5]
+		Dynamika['Data']=result0
+		return(Dynamika)
+
+	def Qubit_dynamics_without_Temp(self, System,Initial_state,probe,excite,DM_flag):
+		#Extract needed characteristics of the system
+		H0=System['Hamiltonian']
+		operator_boson=System['Operators photon']
+		operator_qubit=System['Operator charge number']
+
+		A=operator_boson
+		Ad=operator_boson.dag()
+		Hprobe1=A
+		Hprobe2=Ad
+
+		Hpr1=[Hprobe1,probe[0]]
+		Hpr2=[Hprobe2,probe[1]]
+
+		Hgt1=[operator_qubit,excite[0]]
+		Hgt2=[operator_qubit,excite[1]]
+
+		# collapse operator
+		c_ops=[]
+		T=System['Temperature,K']
+		nres=(np.exp(-h*wr*1e9/kb/T))/(1-np.exp(-h*wr*1e9/kb/T))
+		rate_res=np.sqrt(kappa*(nres+1))*A
+		rate_res2=np.sqrt(kappa*nres)*A.dag()
+		c_ops.append(rate_res)
+		c_ops.append(rate_res2)
+		H=[H0,Hpr1,Hpr2,Hgt1,Hgt2] #full Hamiltonian
+		psi0=Initial_state
+		opts = Options()
+
+		opts.store_states=DM_flag
+		opts.store_final_state=DM_flag
+
+		GND_p=tensor(Transmon_states[0]*Transmon_states[0].dag(),Id_a)
+		EXC_p=tensor(Transmon_states[1]*Transmon_states[1].dag(),Id_a)
+		FER_p=tensor(Transmon_states[2]*Transmon_states[2].dag(),Id_a)
+
+		N_A=Ad*A
+		exp_ops=[N_A,GND_p,EXC_p,FER_p,A+A.dag(),A.dag()-A]
+		result0=mesolve(H,psi0,tlist,c_ops,exp_ops,options=opts)
+		Dynamika={}
+		Dynamika['<$N_a$>']=result0.expect[0]
+		Dynamika['<$p_{gg}$>']=result0.expect[1]
+		Dynamika['<$p_{ee}$>']=result0.expect[2]
+		Dynamika['<$p_{ff}$>']=result0.expect[3]
+		Dynamika['<$a+adag$>']=result0.expect[4]
+		Dynamika['<$a-adag$>']=result0.expect[5]
+		Dynamika['Data']=result0
+		return(Dynamika)
+	def Readout_IQ(self, DATA, start, stop, probe):
+		I=np.real(0.5*DATA[0])
+		Q=np.real(0.5*1j*DATA[1])
+		P_p=probe[0]
+		P_m=probe[1]
+		Cos_ref=np.real(P_p)#np.cos(tlist*2*pi*f_probe)
+		Sin_ref=np.imag(P_m)#np.sin(tlist*2*pi*f_probe)
+		I_non=I*Cos_ref
+		Q_non=Q*Sin_ref
+		start=1
+		Norma=1#(stop-start+1) 
+		I_p=np.sum(I_non[start:stop])/Norma
+		Q_p=np.sum(Q_non[start:stop])/Norma
+		IQ=[I_p,Q_p]
+		return (IQ)
+	def Single_Experiment(self, flux,freq,amp,tp_G,t0_G,Read_amp,collapsep):
+		End=tp_G*2+t0_G
+		Endindex=int(round(End/dt))
+		Excite=Gauss(tp_G,amp,freq,t0_G)
+		Probe=smoothed_pulse(tlist,End+10,300,5,Read_amp,wr)
+		Initial_state=Steady_state(System,collapsep)
+		Dynamics=Qubit_dynamics(H0,Initial_state,Transmon_states,Probe,Excite,collapsep,operator_bos,qubit_oper,False)
+		return Dynamics['<$p_{gg}$>'][Endindex],Dynamics['<$p_{ee}$>'][Endindex],Dynamics['<$p_{ff}$>'][Endindex],Initial_state
+
+	def Steady_state(self, System):
+		 H0=System['Hamiltonian']
+		 cops_list=System['Collapse operators']
+		 final_state = steadystate(H0, cops_list)
+		 return final_state
+	def TLS_environment_define(self, f01,Temperature):
+		H0=0.5*f01*sigmaz()
+		System_ener,System_states=H0.eigenstates()
+		cops_list=[]
+		T=Temperature
+		ff01=System_ener[1]-System_ener[0]
+		nth10=(np.exp(-h*ff01*1e9/kb/T))/(1-np.exp(-h*ff01*1e9/kb/T))
+		s_10=sigmax()-1j*sigmay()
+		gam_10=coupling
+		gam_11=dephas
+		s_11=System_states[1]*System_states[1].dag()
+		rate01_0=np.sqrt(gam_10*(nth10+1))*s_10
+		rate01_1=np.sqrt(gam_10*(nth10))*s_10.dag()
+		cops_list.append(rate01_0)
+		cops_list.append(rate01_1)
+		rate11=np.sqrt(gam_11*(2*nth10+1))*s_11
+		Output={}
+		Output['Hamiltonian']=H0
+		Output['f01']=ff01
+		Output['Energies and states']=[System_ener,System_states]
+		Output['Collapse operators']=cops_list
+		return(Output)
+	def Trans_TLS_Cavity_define(self, EC,EJEC,flux,wr,Vres,Temperature):
+		#     EC- Coulomb energy,
+		#     EJEC=EJ/EC where EJ Josephson energy
+		# wr - linear frequency of resonator,
+		# Vres- RMS voltage at the resonator at resonance frequency, defined as sqrt(hf_r/2C_r) in units of eV 
+		# (i.e. we set V_rms*e)
+		EJ=np.sqrt(np.cos(np.pi*flux)*np.cos(np.pi*flux)+(dd**2)*(np.sin(np.pi*flux))*(np.sin(np.pi*flux))) # Josephson energy of qubit
+		H_bare=Htrans(ng,EC,EJEC*EJ,SIZE_CHARGE) #bare transmon
+		Eig_ener,Eig_states=H_bare.eigenstates() #find the eigenbasis for transmon
+		if N_qb_max<=2:
+			gnd=Eig_states[0]
+			exc=Eig_states[1]
+		else:
+			gnd=Eig_states[0]
+			exc=Eig_states[1]
+			fer=Eig_states[2]
+		N=Charge(self.SIZE_CHARGE) # Coopper pair number operator
+		cos_phi=CoSThe(self.SIZE_CHARGE)# cos phase operator
+		sin_phi=SiNThe(self.SIZE_CHARGE)# sin phase operator
+		change_basis_matrix=qutip.Qobj(np.column_stack(x.full() for x in Eig_states)) # create transformation matrix
+
+		N_eig=change_basis(N,change_basis_matrix) # Coopper pair number operator in the eigenbasis 
+		cos_phi_eig=change_basis(cos_phi,change_basis_matrix)# cos phase operator in the eigenbasis
+		sin_phi_eig=change_basis(sin_phi,change_basis_matrix)# sin phase operator in the eigenbasis 
+		N_ch_eigv_basis = qutip.Qobj(N_eig[:3, :3])
+		cos_phi_eig = qutip.Qobj(cos_phi_eig[:3, :3])
+		sin_phi_eig = qutip.Qobj(sin_phi_eig[:3, :3])
+		Id_trans = qutip.qeye(N_qb_max)
+		Hqub_trunc=4*EC*(N_ch_eigv_basis-ng)**2-EC*EJEC*EJ*cos_phi_eig
+		New_ener,New_states=Hqub_trunc.eigenstates()
+
+		ff01=New_ener[1]-New_ener[0]
+		ff02=New_ener[2]-New_ener[0]
+		ff12=New_ener[2]-New_ener[1]
+
+		Eigenstates_transmon=[New_states[0],New_states[1]]
+		Eigenenergies_transmon=[New_ener[0],New_ener[1]]
+
+		# Time independent part of system, collect the operator in an united basis
+		N_trans=N_ch_eigv_basis
+		#write the whole system hamiltonian in united basis  
+		Hqub=4*EC*(N_trans-ng)**2-EC*EJEC*EJ*cos_phi_eig
+		H0=Hqub
+		System_ener,System_states=H0.eigenstates()
+		cops_list=[]
+		T=Temperature
+
+		nth10=(np.exp(-h*ff01*1e9/kb/T))/(1-np.exp(-h*ff01*1e9/kb/T))
+		nth12=(np.exp(-h*ff12*1e9/kb/T))/(1-np.exp(-h*ff12*1e9/kb/T))
+		nth20=(np.exp(-h*ff02*1e9/kb/T))/(1-np.exp(-h*ff02*1e9/kb/T))
+
+		s_10=New_states[0]*New_states[1].dag()
+		s_12=New_states[1]*New_states[2].dag()
+		s_20=New_states[0]*New_states[2].dag()
+
+		s_11=New_states[1]*New_states[1].dag()-New_states[0]*New_states[0].dag()
+		s_22=New_states[2]*New_states[2].dag()-New_states[0]*New_states[0].dag()
+		s_33=New_states[2]*New_states[2].dag()-New_states[1]*New_states[1].dag()
+
+		gam_10=coupling
+		gam_11=dephas
+
+		rate01_0=np.sqrt(gam_10*(nth10+1))*s_10
+		rate01_1=np.sqrt(gam_10*(nth10))*s_10.dag()
+		cops_list.append(rate01_0)
+		cops_list.append(rate01_1) 
+
+		rate12_0=np.sqrt(2*gam_10*(nth12+1))*s_12
+		rate12_1=np.sqrt(2*gam_10*(nth12))*s_12.dag()
+		cops_list.append(rate12_0)
+		cops_list.append(rate12_1)
+
+		rate11=np.sqrt(gam_11*(2*nth10+1))*s_11
+		rate22=np.sqrt(2*gam_11*(2*nth12+1))*s_22
+		cops_list.append(rate11)
+		cops_list.append(rate22)
+
+		Output={}
+		Output['Hamiltonian']=H0
+		Output['f01']=ff01
+		Output['Energies and states']=[System_ener,System_states]
+		Output['Transmon states']=Eigenstates_transmon
+		Output['Operator charge number']=N_trans
+		Output['Collapse operators']=cops_list
+		Output['Thermal photons']=[nth10,nth12]
+		return(Output)
+
+	# some function for thermometry
+	def a_coef(self, Temp, f01, f12):
+		Num=np.exp(-h*f01*1e9/kb/Temp)-np.exp(-h*(f01+f12)*1e9/kb/Temp)
+		Den=1-np.exp(-h*(f01)*1e9/kb/Temp)
+		return Num/Den
+	def b_coef(self, Temp, f01, f12):
+		Num=np.exp(-h*f01*1e9/kb/Temp)-np.exp(-h*(f01+f12)*1e9/kb/Temp)
+		Den=1-np.exp(-h*(f01+f12)*1e9/kb/Temp)
+		return Num/Den
+	def c_coef(self, Temp, f01, f12):
+		Num=1-np.exp(-h*(f01)*1e9/kb/Temp)
+		Den=1-np.exp(-h*(f01+f12)*1e9/kb/Temp)
+		return Num/Den
+	def c_coef(self, Temp, f01, f12):
+		Num=1-np.exp(-h*(f01)*1e9/kb/Temp)
+		Den=1-np.exp(-h*(f01+f12)*1e9/kb/Temp)
+		return Num/Den
+	def c_coef2(self, Temp, f01, f12,gess):
+		Num=1-np.exp(-h*(f01)*1e9/kb/Temp)
+		Den=1-np.exp(-h*(f01+f12)*1e9/kb/Temp)
+		return Num/Den-gess	
+
+	def READOUT_MIXER(self, DATA,fc,tlist2,plot_flag):
+		Fs=1/dt
+		idown = DATA * np.cos(1*-fc*tlist2) 
+		qdown = DATA * -np.sin(1*fc*tlist2)
+		fftLen = 4*len(DATA)  # perform 4-times zeropadding to get smoother spectrum
+		spectrum = lambda x: np.fft.fftshift(np.fft.fft(x, fftLen)) / Fs * (len(DATA))
+		f_u = np.linspace(-Fs/2, Fs/2, fftLen)
+		S=spectrum(DATA)
+
+		Idown = spectrum(idown)
+		Qdown = spectrum(qdown)
+		if plot_flag:
+			plt.figure()
+			plt.subplot(121)
+			plt.plot(f_u/fc*2*np.pi, Idown.real, label=r'$\Re\{I_(f)\}$', color='r')
+			plt.plot(f_u/fc*2*np.pi, S.real, label='$\Re\{S(f)\}$', color='b')
+			plt.legend()
+			plt.subplot(122)
+			plt.plot(f_u*2*np.pi/fc, Qdown.real, label=r'$\Re\{Q_(f)\}$', color='r')
+			plt.plot(f_u*2*np.pi/fc, S.imag, label=r'$\Im\{S(f)\}$', color='b')
+			plt.legend()
+		Ts = dt*100
+		BN = 1/(2*Ts )
+		cutoff = 10*BN        # arbitrary design parameters
+		lowpass_order = 51 
+		lowpass_delay = (lowpass_order // 2)/Fs  # a lowpass of order N delays the signal by N/2 samples (see plot)
+		# design the filter
+		lowpass = scipy.signal.firwin(lowpass_order, cutoff/(Fs/2))
+
+		# calculate frequency response of filter
+		t_lp = np.arange(len(lowpass))/Fs
+		f_lp = np.linspace(-Fs/2, Fs/2, 2048, endpoint=False)
+		H = np.fft.fftshift(np.fft.fft(lowpass, 2048))
+		if plot_flag:
+			plt.figure()
+			plt.subplot(121)
+			plt.plot(t_lp/Ts, lowpass)
+			plt.gca().annotate(r'$\tau_{LP}$', xy=(lowpass_delay/Ts,0.08), xytext=(lowpass_delay/Ts+0.3, 0.08), arrowprops=dict(arrowstyle='->'))
+			plt.legend()
+			plt.subplot(122)
+			plt.plot(f_lp, 20*np.log10(abs(H)))
+		idown_lp = scipy.signal.lfilter(lowpass, 1, idown)
+		qdown_lp = scipy.signal.lfilter(lowpass, 1, qdown)
+
+		Idown_lp = spectrum(idown_lp)
+		Qdown_lp = spectrum(qdown_lp)
+		v = idown_lp + 1j*qdown_lp
+
+		if plot_flag:
+			plt.figure()
+			plt.subplot(121)
+			plt.plot(f_u, abs(Idown), 'r', lw=2, label=r'$|I_{down}(f)|$')
+			plt.plot(f_u, abs(Idown_lp), 'g-', label=r'$|I_{down,lp}(f)|$')
+			plt.legend()
+			plt.subplot(122)
+			plt.plot(f_u, abs(Qdown), 'r', lw=2, label=r'$|Q_{down}(f)|$')
+			plt.plot(f_u, abs(Qdown_lp), 'g', label=r'$|Q_{down,lp}(f)|$')
+			plt.legend()
+			plt.figure()
+			plt.plot(tlist2,np.real(v))
+			plt.plot(tlist2,np.real(DATA),alpha=0.25)
+			plt.figure()
+			plt.plot(tlist2,np.imag(v))
+			plt.plot(tlist2,np.imag(DATA),alpha=0.25)
+		return v
 
 
 def resource_path(relative_path):
