@@ -271,8 +271,10 @@ class CommonWindow(QtWidgets.QWidget):
 
 		self.meas_thread = evThread()
 
+		
+		#self.btn_visa_connect.clicked.connect(self.on_get_current_path)
+		self.btn_visa_connect.clicked.connect(self.meas_thread.on_connected)
 		self.btn_visa_connect.clicked.connect(self.on_connected)
-		self.btn_visa_connect.clicked.connect(self.on_get_current_path)
 		self.btn_visa_disconnect.clicked.connect(self.on_disconnected)
 		self.btn_save.clicked.connect(self.on_save_to_file)
 		self.btn_load_file.clicked.connect(self.on_load_from_file) 
@@ -289,9 +291,9 @@ class CommonWindow(QtWidgets.QWidget):
 
 	def on_connected(self):
 		try:
-			self.ser = serial.Serial(self.ComPort, baudrate=115200, bytesize=serial.EIGHTBITS,
-									 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 0.1)
-			self.ser.isOpen()  # try to open port
+			#self.ser = serial.Serial(self.ComPort, baudrate=921600, bytesize=serial.EIGHTBITS,
+			#						 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 0.1)
+			#self.ser.isOpen()  # try to open port
 			self.btn_visa_connect.setDisabled(True)
 			self.btn_visa_disconnect.setDisabled(False)
 			self.btn_fetch.setDisabled(False)
@@ -317,7 +319,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.comport_combo.setEnabled(True)
 		self.log_widget.appendPlainText("[{}] Disconnected".format(strftime("%H:%M:%S")))
 		try:	
-			self.ser.close()
+			#self.ser.close()
 		except:
 			#print("serial port close exception, on_disconnect --traceback")
 			self.log_widget.appendPlainText("[{}] error, device session lost".format(strftime("%H:%M:%S")))
@@ -339,6 +341,7 @@ class CommonWindow(QtWidgets.QWidget):
 	def on_fetch_data(self):
 		if self.fetch_enable == True:
 			self.fetch_enable = False
+
 		else:
 			self.fetch_enable = True
 	def on_send_to_timer(self):
@@ -563,9 +566,13 @@ class evThread(QtCore.QThread):
 	status_signal = QtCore.pyqtSignal(str)
 	dataplot = QtCore.pyqtSignal(np.ndarray)
 	progress = QtCore.pyqtSignal(int)
-	def __init__(self, parent = None):
+	def __init__(self, parent = None, comport):
 		QtCore.QThread.__init__(self,parent)
 		self.running = False
+
+
+
+
 		
 	def run(self):
 		self.running = True
@@ -573,11 +580,64 @@ class evThread(QtCore.QThread):
 			if self.running == True:
 				#self.sleep(1)
 				self.status_signal.emit("{} / {}".format(i+1,100))
+				
+
 				self.dataplot.emit(np.random.randn(200,))
-				self.progress.emit(4*i+4)
+				#self.progress.emit(4*i+4)
 				
 		if self.running == False:
 			self.status_signal.emit("Interrupted")
+
+	def on_connected(self):
+		try:
+			self.ser = serial.Serial(self.ComPort, baudrate=921600, bytesize=serial.EIGHTBITS,
+									 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 0.1)
+			self.ser.isOpen()  # try to open port
+			self.btn_visa_connect.setDisabled(True)
+			self.btn_visa_disconnect.setDisabled(False)
+			self.btn_fetch.setDisabled(False)
+			self.btn_save.setDisabled(False)
+			self.serialDeviceConnected = True
+			self.comport_combo.setEnabled(False)
+			self.log_widget.appendPlainText("[{}] Connected to {}".format(strftime("%H:%M:%S"), self.ComPort))
+		except IOError:
+			#print("Port already open another programm")
+			self.log_widget.appendPlainText("[{}] Port {} already open another programm".format(strftime("%H:%M:%S"), self.ComPort))
+		except serial.SerialException:
+			#print("SerialException")
+			self.log_widget.appendPlainText("[{}] SerialException".format(strftime("%H:%M:%S")))
+		except Exception:
+			#print("Unexpected error, Null ComName")
+			self.log_widget.appendPlainText("[{}] unexpected error".format(strftime("%H:%M:%S")))
+	def on_disconnected(self):
+		self.btn_visa_connect.setDisabled(False)
+		self.btn_visa_disconnect.setDisabled(True)	
+		self.btn_fetch.setDisabled(True)
+		self.btn_save.setDisabled(True)
+		self.serialDeviceConnected = False
+		self.comport_combo.setEnabled(True)
+		self.log_widget.appendPlainText("[{}] Disconnected".format(strftime("%H:%M:%S")))
+		try:	
+			self.ser.close()
+		except:
+			#print("serial port close exception, on_disconnect --traceback")
+			self.log_widget.appendPlainText("[{}] error, device session lost".format(strftime("%H:%M:%S")))
+		#print("Disconnected")
+			
+	def on_activated_com_list(self, str):
+		if self.comport_combo.currentText() == "" or self.serialDeviceConnected == True:
+			self.btn_visa_connect.setDisabled(True)
+		elif self.comport_combo.currentText() == "Refresh":
+			self.btn_visa_connect.setDisabled(True)
+			self.comport_combo.clear()
+			self.comport_combo.addItems([""])
+			self.comport_combo.addItems(["Refresh"])
+			self.comport_combo.addItems(serial_ports())
+		else:
+			self.ComPort = str
+			self.btn_visa_connect.setDisabled(False)
+
+
 		
 class ppData:
 	"""this class will be used for post processing of data"""
