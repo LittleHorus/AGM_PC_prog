@@ -70,7 +70,8 @@ class CommonWindow(QtWidgets.QWidget):
 		self.first_load = 0
 		self.previous_row = 0
 		self.current_row = -1
-
+		self.data_from_f4 = 0
+		self.y_axio = list()
 		self.count = 0
 		self.last_clicked_plot = 0
 		#pg.setConfigOption('background', 'd')
@@ -270,24 +271,40 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_save.setDisabled(True)
 
 		self.meas_thread = evThread()
+		self.meas_thread.start()
 
 		
 		#self.btn_visa_connect.clicked.connect(self.on_get_current_path)
-		self.btn_visa_connect.clicked.connect(self.meas_thread.on_connected)
+		#self.btn_visa_connect.clicked.connect(self.meas_thread.on_connected)
 		self.btn_visa_connect.clicked.connect(self.on_connected)
 		self.btn_visa_disconnect.clicked.connect(self.on_disconnected)
 		self.btn_save.clicked.connect(self.on_save_to_file)
 		self.btn_load_file.clicked.connect(self.on_load_from_file) 
 		self.btn_fetch.clicked.connect(self.on_fetch_data)
+		#self.comport_combo.activated.connect(self.meas_thread.on_activated_com_list)
 
 		#self.meas_thread.started.connect(self.on_meas_started)
 		#self.meas_thread.finished.connect(self.on_meas_completed)
 		#self.meas_thread.status_signal.connect(self.on_status_text_change, QtCore.Qt.QueuedConnection)
-		#self.meas_thread.dataplot.connect(self.graph.plot, QtCore.Qt.QueuedConnection)
+		#self.meas_thread.dataplot.connect(self.data_from_f4, QtCore.Qt.QueuedConnection)
+		self.meas_thread.dataplot.connect(self.on_data_received, QtCore.Qt.QueuedConnection)
 		#self.meas_thread.progress.connect(self.on_progress_go,QtCore.Qt.QueuedConnection)
 		#self.proxy = pg.SignalProxy(self.graph.scene().sigMouseMoved, rateLimit=60, slot=self.mouseMoved)
 		#self.curve.sigClicked.connect(self.clicked_point)
 		#self.curve.sigPointsClicked.connect(self.clicked_point)
+
+
+	def on_data_received(self,data):
+		self.graph.clear()
+		
+		self.y_axio.append(data)
+		if(len(self.y_axio)>200):
+			length = len(self.y_axio)
+			fp = length - 200
+			self.y_axio = self.y_axio[fp:length]
+		x_axio = np.linspace(0,len(self.y_axio)-1, len(self.y_axio))
+		self.curve1 = self.graph.plot(x_axio,self.y_axio, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
+		self.log_widget.appendPlainText("[{}] new data from mcu".format(strftime("%H:%M:%S")))
 
 	def on_connected(self):
 		try:
@@ -300,6 +317,7 @@ class CommonWindow(QtWidgets.QWidget):
 			self.btn_save.setDisabled(False)
 			self.serialDeviceConnected = True
 			self.comport_combo.setEnabled(False)
+			self.meas_thread.on_connected(self.ComPort)
 			self.log_widget.appendPlainText("[{}] Connected to {}".format(strftime("%H:%M:%S"), self.ComPort))
 		except IOError:
 			#print("Port already open another programm")
@@ -320,6 +338,8 @@ class CommonWindow(QtWidgets.QWidget):
 		self.log_widget.appendPlainText("[{}] Disconnected".format(strftime("%H:%M:%S")))
 		try:	
 			#self.ser.close()
+			self.meas_thread.on_disconnected()
+			pass
 		except:
 			#print("serial port close exception, on_disconnect --traceback")
 			self.log_widget.appendPlainText("[{}] error, device session lost".format(strftime("%H:%M:%S")))
@@ -341,9 +361,16 @@ class CommonWindow(QtWidgets.QWidget):
 	def on_fetch_data(self):
 		if self.fetch_enable == True:
 			self.fetch_enable = False
+			self.meas_thread.running = False
+			self.log_widget.appendPlainText("[{}] fetch stop".format(strftime("%H:%M:%S")))
 
 		else:
 			self.fetch_enable = True
+			self.meas_thread.running = True
+			self.meas_thread.run()
+			self.log_widget.appendPlainText("[{}] fetch start".format(strftime("%H:%M:%S")))
+			
+
 	def on_send_to_timer(self):
 		#self.slave_speed_lo = 0x00
 		#self.slave_speed_hi = 0x00
@@ -564,64 +591,63 @@ class CommonWindow(QtWidgets.QWidget):
 class evThread(QtCore.QThread):
 	
 	status_signal = QtCore.pyqtSignal(str)
-	dataplot = QtCore.pyqtSignal(np.ndarray)
+	dataplot = QtCore.pyqtSignal(int)
 	progress = QtCore.pyqtSignal(int)
-	def __init__(self, parent = None, comport):
+
+	def __init__(self, parent = None):
 		QtCore.QThread.__init__(self,parent)
 		self.running = False
-
-
-
-
+		self.ComPort = str
+		self.data = 0
 		
 	def run(self):
-		self.running = True
-		for i in range(25):
-			if self.running == True:
-				#self.sleep(1)
-				self.status_signal.emit("{} / {}".format(i+1,100))
-				
-
-				self.dataplot.emit(np.random.randn(200,))
-				#self.progress.emit(4*i+4)
-				
+		#self.running = True
+		while self.running == True:
+			self.data = 1#int.from_bytes((self.ser.read(1)), byteorder='big', signed=False)#100*np.random.random(1)#
+			print(int.from_bytes((self.ser.read(1)), byteorder='big', signed=False))
+			
+			self.status_signal.emit("in progress")
+			#self.dataplot.emit(self.data)
+			time.sleep(1)
 		if self.running == False:
 			self.status_signal.emit("Interrupted")
 
-	def on_connected(self):
+	def on_connected(self, comport):
 		try:
+			self.ComPort = comport
 			self.ser = serial.Serial(self.ComPort, baudrate=921600, bytesize=serial.EIGHTBITS,
-									 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 0.1)
+									 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 0.01)
 			self.ser.isOpen()  # try to open port
-			self.btn_visa_connect.setDisabled(True)
-			self.btn_visa_disconnect.setDisabled(False)
-			self.btn_fetch.setDisabled(False)
-			self.btn_save.setDisabled(False)
+			#self.btn_visa_connect.setDisabled(True)
+			#self.btn_visa_disconnect.setDisabled(False)
+			#self.btn_fetch.setDisabled(False)
+			#self.btn_save.setDisabled(False)
 			self.serialDeviceConnected = True
-			self.comport_combo.setEnabled(False)
-			self.log_widget.appendPlainText("[{}] Connected to {}".format(strftime("%H:%M:%S"), self.ComPort))
+			#self.comport_combo.setEnabled(False)
+			#self.log_widget.appendPlainText("[{}] Connected to {}".format(strftime("%H:%M:%S"), self.ComPort))
 		except IOError:
-			#print("Port already open another programm")
-			self.log_widget.appendPlainText("[{}] Port {} already open another programm".format(strftime("%H:%M:%S"), self.ComPort))
+			print("Port already open another programm")
+			#self.log_widget.appendPlainText("[{}] Port {} already open another programm".format(strftime("%H:%M:%S"), self.ComPort))
 		except serial.SerialException:
-			#print("SerialException")
-			self.log_widget.appendPlainText("[{}] SerialException".format(strftime("%H:%M:%S")))
-		except Exception:
+			print("SerialException")
+
+			#self.log_widget.appendPlainText("[{}] SerialException".format(strftime("%H:%M:%S")))
+		#except Exception:
 			#print("Unexpected error, Null ComName")
-			self.log_widget.appendPlainText("[{}] unexpected error".format(strftime("%H:%M:%S")))
+			#self.log_widget.appendPlainText("[{}] unexpected error".format(strftime("%H:%M:%S")))
 	def on_disconnected(self):
-		self.btn_visa_connect.setDisabled(False)
-		self.btn_visa_disconnect.setDisabled(True)	
-		self.btn_fetch.setDisabled(True)
-		self.btn_save.setDisabled(True)
+		#self.btn_visa_connect.setDisabled(False)
+		#self.btn_visa_disconnect.setDisabled(True)	
+		#self.btn_fetch.setDisabled(True)
+		#self.btn_save.setDisabled(True)
 		self.serialDeviceConnected = False
-		self.comport_combo.setEnabled(True)
-		self.log_widget.appendPlainText("[{}] Disconnected".format(strftime("%H:%M:%S")))
+		#self.comport_combo.setEnabled(True)
+		#self.log_widget.appendPlainText("[{}] Disconnected".format(strftime("%H:%M:%S")))
 		try:	
 			self.ser.close()
 		except:
-			#print("serial port close exception, on_disconnect --traceback")
-			self.log_widget.appendPlainText("[{}] error, device session lost".format(strftime("%H:%M:%S")))
+			print("serial port close exception, on_disconnect --traceback")
+			#self.log_widget.appendPlainText("[{}] error, device session lost".format(strftime("%H:%M:%S")))
 		#print("Disconnected")
 			
 	def on_activated_com_list(self, str):
