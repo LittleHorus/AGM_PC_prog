@@ -67,7 +67,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.x_ax = np.linspace(0, 1, 256)
 
 		self.filter_data_out = 30
-		self.filter_k = 0.95
+		self.filter_k = 0.99
 		self.data_to_storage = list()
 
 		self.fetch_enable = False
@@ -195,6 +195,10 @@ class CommonWindow(QtWidgets.QWidget):
 		self.timeout_label.setMaximumSize(horizontal_size,vertical_size)
 		self.timeout_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)	
 
+		self.btn_clear = QtWidgets.QPushButton("&Clear")
+		self.btn_clear.setMaximumSize(horizontal_size,vertical_size)
+		self.btn_clear.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
+
 		self.btn_fetch = QtWidgets.QPushButton("&Fetch")
 		self.btn_fetch.setMaximumSize(horizontal_size,vertical_size)
 		self.btn_fetch.setSizePolicy(QtWidgets.QSizePolicy.Fixed,QtWidgets.QSizePolicy.Fixed)
@@ -213,6 +217,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.grid.addWidget(self.btn_visa_disconnect, 0, 3)
 		
 		self.grid.addWidget(self.timeout_label, 1, 3)
+		self.grid.addWidget(self.btn_clear, 1, 2)
 		self.grid.addWidget(self.btn_fetch,2,0)
 		#self.grid.addWidget(self.btn_stop,2,1)
 		self.grid.addWidget(self.btn_save,2,1)
@@ -285,6 +290,7 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_save.clicked.connect(self.on_save_to_file)
 		self.btn_load_file.clicked.connect(self.on_load_from_file) 
 		self.btn_fetch.clicked.connect(self.on_fetch_data)
+		self.btn_clear.clicked.connect(self.on_clear_data)
 		#self.comport_combo.activated.connect(self.meas_thread.on_activated_com_list)
 
 		#self.meas_thread.started.connect(self.on_meas_started)
@@ -297,6 +303,15 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.proxy = pg.SignalProxy(self.graph.scene().sigMouseMoved, rateLimit=60, slot=self.mouseMoved)
 		#self.curve.sigClicked.connect(self.clicked_point)
 		#self.curve.sigPointsClicked.connect(self.clicked_point)
+
+	def on_clear_data(self):
+		self.data_to_storage = list()
+		self.y_axio = list()
+		self.graph_pressure.clear()
+		self.graph.clear()
+		self.description_widget.clear()
+		self.log_widget.clear()
+
 
 	def filter(self, data_input):
 		data_result = list()
@@ -316,8 +331,11 @@ class CommonWindow(QtWidgets.QWidget):
 			fp = length - 2000
 			self.y_axio = self.y_axio[fp:length]
 		x_axio = np.linspace(0,len(self.y_axio)-1, len(self.y_axio))
+
+		data_np = np.asarray(self.y_axio)
+		mean_value = np.mean(data_np)
 		self.curve1 = self.graph.plot(x_axio,self.y_axio, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 4)
-		self.log_widget.appendPlainText("[{}] new data from mcu, total length {}".format(strftime("%H:%M:%S"), len(self.data_to_storage)))	
+		self.log_widget.appendPlainText("[{}] new data from mcu, total length {} mean {:4.2f}".format(strftime("%H:%M:%S"), len(self.data_to_storage), mean_value))	
 
 	def on_data_received(self,data):
 		self.graph.clear()
@@ -504,6 +522,8 @@ class CommonWindow(QtWidgets.QWidget):
 						self.graph_pressure.clear()
 						self.file_data_microphone = data_items['DATA']
 						self.file_description = data_items['description']
+						self.description_widget.clear()
+						self.description_widget.appendPlainText(self.file_description)						
 						x_axio = np.linspace(0,len(self.file_data_microphone)-1, len(self.file_data_microphone))
 						self.curve = self.graph_pressure.plot(x_axio,self.file_data_microphone, pen = pg.mkPen('w', width = 3), symbol = 'o', symbolSize = 4)
 						self.log_widget.appendPlainText("[{}] file succesful load[microphone]".format(strftime("%H:%M:%S")))
