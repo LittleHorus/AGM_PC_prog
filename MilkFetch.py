@@ -53,17 +53,22 @@ class CommonWindow(QtWidgets.QWidget):
 		self.file_data_ch1 = np.empty(0)
 		self.file_data_ch2 = np.empty(0)
 		self.file_data_pressure = np.empty(0)
+		self.file_data_microphone = np.empty(0)
 		self.file_x_ax = np.empty(0)
 		self.data = [0]#test data value for plot
 		self.data_download_done = 0
 		self.data_load_from_file_done = 0
 		self.milk_data_from_file = np.empty((2,256))
-		self.trace1 = np.empty(256)
-		self.trace2 = np.empty(256)
-		self.trace1 = np.random.random(256)
-		self.trace2 = np.random.random(256)
-		self.trace3 = np.random.random(256)
+		self.trace1 = np.zeros(256)
+		self.trace2 = np.zeros(256)
+		#self.trace1 = np.random.random(256)
+		#self.trace2 = np.random.random(256)
+		self.trace3 = np.zeros(256)
 		self.x_ax = np.linspace(0, 1, 256)
+
+		self.filter_data_out = 30
+		self.filter_k = 0.95
+		self.data_to_storage = list()
 
 		self.fetch_enable = False
 
@@ -98,12 +103,12 @@ class CommonWindow(QtWidgets.QWidget):
 		self.hLine = pg.InfiniteLine(angle=0, movable=False, pen = pg.mkPen('y', width = 1))
 		self.graph.addItem(self.vLine, ignoreBounds=True)
 		self.graph.addItem(self.hLine, ignoreBounds=True)
-		self.graph.setRange(yRange = (0,4095))
-		self.graph_pressure.setRange(yRange = (0,100))
+		#self.graph.setRange(yRange = (0,4095))
+		#self.graph_pressure.setRange(yRange = (0,100))
 
-		self.curve = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
-		self.curve = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 10)
-		self.curve_pressure = self.graph_pressure.plot(self.x_ax,self.trace3, pen = pg.mkPen('r', width = 3), symbol = 'o', symbolSize = 10)
+		self.curve = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 4)
+		self.curve = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 4)
+		self.curve_pressure = self.graph_pressure.plot(self.x_ax,self.trace3, pen = pg.mkPen('r', width = 3), symbol = 'o', symbolSize = 4)
 
 		self.INITIAL_MODBUS = 0xFFFF
 		self.INITIAL_DF1 = 0x0000
@@ -271,9 +276,8 @@ class CommonWindow(QtWidgets.QWidget):
 		self.btn_save.setDisabled(True)
 
 		self.meas_thread = evThread()
-		self.meas_thread.start()
+		#self.meas_thread.start()
 
-		
 		#self.btn_visa_connect.clicked.connect(self.on_get_current_path)
 		#self.btn_visa_connect.clicked.connect(self.meas_thread.on_connected)
 		self.btn_visa_connect.clicked.connect(self.on_connected)
@@ -288,11 +292,36 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.meas_thread.status_signal.connect(self.on_status_text_change, QtCore.Qt.QueuedConnection)
 		#self.meas_thread.dataplot.connect(self.data_from_f4, QtCore.Qt.QueuedConnection)
 		self.meas_thread.dataplot.connect(self.on_data_received, QtCore.Qt.QueuedConnection)
+		self.meas_thread.dataplot_array.connect(self.on_data_array_received, QtCore.Qt.QueuedConnection)
 		#self.meas_thread.progress.connect(self.on_progress_go,QtCore.Qt.QueuedConnection)
 		#self.proxy = pg.SignalProxy(self.graph.scene().sigMouseMoved, rateLimit=60, slot=self.mouseMoved)
 		#self.curve.sigClicked.connect(self.clicked_point)
 		#self.curve.sigPointsClicked.connect(self.clicked_point)
 
+	def filter(self, data_input):
+		data_result = list()
+
+		for i in range(len(data_input)):
+			self.filter_data_out = self.filter_data_out*self.filter_k + (1-self.filter_k)*data_input[i]
+			data_result.append(self.filter_data_out)
+
+		return data_result
+
+	def on_data_array_received(self, data_array):
+		self.graph.clear()
+		temp_data = self.filter(data_array)
+		self.y_axio += temp_data
+		self.data_to_storage += temp_data
+
+		#self.y_axio += (data_array)
+		#print(self.y_axio)
+		if(len(self.y_axio)>2000):
+			length = len(self.y_axio)
+			fp = length - 2000
+			self.y_axio = self.y_axio[fp:length]
+		x_axio = np.linspace(0,len(self.y_axio)-1, len(self.y_axio))
+		self.curve1 = self.graph.plot(x_axio,self.y_axio, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 4)
+		self.log_widget.appendPlainText("[{}] new data from mcu, total length {}".format(strftime("%H:%M:%S"), len(self.data_to_storage)))	
 
 	def on_data_received(self,data):
 		self.graph.clear()
@@ -303,7 +332,7 @@ class CommonWindow(QtWidgets.QWidget):
 			fp = length - 200
 			self.y_axio = self.y_axio[fp:length]
 		x_axio = np.linspace(0,len(self.y_axio)-1, len(self.y_axio))
-		self.curve1 = self.graph.plot(x_axio,self.y_axio, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
+		self.curve1 = self.graph.plot(x_axio,self.y_axio, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 4)
 		self.log_widget.appendPlainText("[{}] new data from mcu".format(strftime("%H:%M:%S")))
 
 	def on_connected(self):
@@ -363,11 +392,14 @@ class CommonWindow(QtWidgets.QWidget):
 			self.fetch_enable = False
 			self.meas_thread.running = False
 			self.log_widget.appendPlainText("[{}] fetch stop".format(strftime("%H:%M:%S")))
+			self.graph_pressure.clear()
+			x_axio = np.linspace(0,len(self.data_to_storage)-1, len(self.data_to_storage))
+			self.curve1 = self.graph_pressure.plot(x_axio,self.data_to_storage, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 6)
 
 		else:
 			self.fetch_enable = True
 			self.meas_thread.running = True
-			self.meas_thread.run()
+			self.meas_thread.start()
 			self.log_widget.appendPlainText("[{}] fetch start".format(strftime("%H:%M:%S")))
 			
 
@@ -416,9 +448,10 @@ class CommonWindow(QtWidgets.QWidget):
 		self.ser.write(self.data_bytearray)	
 
 	def on_get_current_path(self):
-		print(os.path.dirname(os.path.abspath(__file__)))	
+		return(os.path.dirname(os.path.abspath(__file__)))	
 	def on_save_to_file(self):
-		self.data_to_file(strftime("%Y-%m-%d_%Hh%Mm%Ss", gmtime()))	
+		#self.data_to_file(strftime("%Y-%m-%d_%Hh%Mm%Ss", gmtime()))	
+		self.data_to_file_microphone(strftime("%Y-%m-%d_%Hh%Mm%Ss", gmtime()))
 	def data_to_file(self, name = "milk_data"):
 		self.file_description = self.description_widget.toPlainText()
 		self.file_x_ax = self.x_ax
@@ -433,8 +466,20 @@ class CommonWindow(QtWidgets.QWidget):
 			self.log_widget.appendPlainText("[{}] file succesful save".format(strftime("%H:%M:%S")))
 		except Exception:
 			self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), traceback.format_exc()))	
+	def data_to_file_microphone(self, name = "milk_data"):
+		self.file_description = self.description_widget.toPlainText()
+		self.file_data_ch1 = self.data_to_storage		
+		dict_to_save = {'description':self.file_description, 'DATA':self.file_data_ch1}
+		dict_filename = "{}\\milk_microphone_{}.npy".format(os.path.dirname(os.path.abspath(__file__)),name)
+		#filename = "{}\\milk_{}.dat".format(os.path.dirname(os.path.abspath(__file__)),name)
+		
+		try:
+			np.save(dict_filename, dict_to_save)
+			self.log_widget.appendPlainText("[{}] file succesful save".format(strftime("%H:%M:%S")))
+		except Exception:
+			self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), traceback.format_exc()))				
 	def on_load_from_file(self):
-		fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')[0]
+		fname = QFileDialog.getOpenFileName(self, 'Open file', '{}/'.format(self.on_get_current_path()))[0]#/home
 		self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), fname))	
 		if fname:
 			try:
@@ -454,8 +499,8 @@ class CommonWindow(QtWidgets.QWidget):
 						self.trace1[i] = (data_u16[2*i])
 						self.trace2[i] = (data_u16[2*i+1])
 					self.x_ax = np.linspace(0,1,int(len(data_u16)/2))
-					self.curve1 = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
-					self.curve2 = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 10)
+					self.curve1 = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 4)
+					self.curve2 = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 4)
 				else:
 					#self.log_widget.appendPlainText("[{}] wrong file type".format(strftime("%H:%M:%S")))
 					data_dict = np.load(fname, allow_pickle=True)
@@ -463,31 +508,45 @@ class CommonWindow(QtWidgets.QWidget):
 					self.file_data_ch1 = np.empty(0)
 					self.file_data_ch2 = np.empty(0)
 					self.file_data_pressure = np.empty(0)
+					self.file_data_microphone = np.empty(0)
 					data_items = data_dict.item()
-					self.graph.clear()
-					self.graph_pressure.clear()
-					
-					self.file_description = data_items['description']
-					self.file_data_ch1 = data_items['CH1']
-					self.file_data_ch2 = data_items['CH2']
-					self.file_data_pressure = data_items['Pressure']	
-					self.file_x_ax = data_items['Time']
-					self.data_download_done = 1
 
-					self.description_widget.clear()
-					self.description_widget.appendPlainText(self.file_description)
+					file_type = 'MILK_PHOTODIODE'
+					for key in data_items.keys():
+						if key == 'DATA':
+							file_type = 'MILK_MICROPHONE'
+					if file_type == 'MILK_MICROPHONE':
+						self.graph_pressure.clear()
+						self.file_data_microphone = data_items['DATA']
+						self.file_description = data_items['description']
+						x_axio = np.linspace(0,len(self.file_data_microphone)-1, len(self.file_data_microphone))
+						self.curve = self.graph_pressure.plot(x_axio,self.file_data_microphone, pen = pg.mkPen('w', width = 3), symbol = 'o', symbolSize = 4)
 
-					self.trace1 = self.file_data_ch1
-					self.trace2 = self.file_data_ch2
-					self.trace3 = self.file_data_pressure
-					self.x_ax = self.file_x_ax
+					else:
+						self.graph.clear()
+						self.graph_pressure.clear()
+						
+						self.file_description = data_items['description']
+						self.file_data_ch1 = data_items['CH1']
+						self.file_data_ch2 = data_items['CH2']
+						self.file_data_pressure = data_items['Pressure']	
+						self.file_x_ax = data_items['Time']
+						self.data_download_done = 1
 
-					self.curve1 = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 10)
-					self.curve2 = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 10)
-					self.curve3 = self.graph_pressure.plot(self.x_ax,self.trace3, pen = pg.mkPen('r', width = 3), symbol = 'o', symbolSize = 10)
+						self.description_widget.clear()
+						self.description_widget.appendPlainText(self.file_description)
 
-					self.btn_save.setDisabled(False)
-					self.log_widget.appendPlainText("[{}] file succesful load".format(strftime("%H:%M:%S")))
+						self.trace1 = self.file_data_ch1
+						self.trace2 = self.file_data_ch2
+						self.trace3 = self.file_data_pressure
+						self.x_ax = self.file_x_ax
+
+						self.curve1 = self.graph.plot(self.x_ax,self.trace1, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 4)
+						self.curve2 = self.graph.plot(self.x_ax,self.trace2, pen = pg.mkPen('y', width = 3), symbol = 'o', symbolSize = 4)
+						self.curve3 = self.graph_pressure.plot(self.x_ax,self.trace3, pen = pg.mkPen('r', width = 3), symbol = 'o', symbolSize = 4)
+
+						self.btn_save.setDisabled(False)
+						self.log_widget.appendPlainText("[{}] file succesful load".format(strftime("%H:%M:%S")))
 			except:
 				self.log_widget.appendPlainText("[{}] file load failed".format(strftime("%H:%M:%S")))	
 				self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), traceback.format_exc()))						
@@ -593,24 +652,33 @@ class evThread(QtCore.QThread):
 	status_signal = QtCore.pyqtSignal(str)
 	dataplot = QtCore.pyqtSignal(int)
 	progress = QtCore.pyqtSignal(int)
+	dataplot_array = QtCore.pyqtSignal(list)
 
 	def __init__(self, parent = None):
 		QtCore.QThread.__init__(self,parent)
 		self.running = False
 		self.ComPort = str
 		self.data = 0
+		self.data_array = list()
 		
 	def run(self):
-		#self.running = True
+		self.running = True
 		while self.running == True:
-			self.data = 1#int.from_bytes((self.ser.read(1)), byteorder='big', signed=False)#100*np.random.random(1)#
-			print(int.from_bytes((self.ser.read(1)), byteorder='big', signed=False))
-			
-			self.status_signal.emit("in progress")
-			#self.dataplot.emit(self.data)
-			time.sleep(1)
-		if self.running == False:
-			self.status_signal.emit("Interrupted")
+			if self.running == True:
+				self.data_array = list()
+				for i in range(1000):
+					self.data = int.from_bytes((self.ser.read(1)), byteorder='big', signed=False)#100*np.random.random(1)#
+					self.data_array.append(self.data)
+					#time.sleep(0.0001)
+				#print(int.from_bytes((self.ser.read(1)), byteorder='big', signed=False))
+				#print(self.data_array)
+				self.dataplot_array.emit(self.data_array)
+
+				self.status_signal.emit("in progress")
+				#self.dataplot.emit(self.data)
+			#time.sleep(0.01)
+			if self.running == False:
+				self.status_signal.emit("Interrupted")
 
 	def on_connected(self, comport):
 		try:
