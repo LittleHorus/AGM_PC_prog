@@ -300,11 +300,9 @@ class CommonWindow(QtWidgets.QWidget):
 
 	def filter(self, data_input):
 		data_result = list()
-
 		for i in range(len(data_input)):
 			self.filter_data_out = self.filter_data_out*self.filter_k + (1-self.filter_k)*data_input[i]
 			data_result.append(self.filter_data_out)
-
 		return data_result
 
 	def on_data_array_received(self, data_array):
@@ -313,8 +311,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.y_axio += temp_data
 		self.data_to_storage += temp_data
 
-		#self.y_axio += (data_array)
-		#print(self.y_axio)
 		if(len(self.y_axio)>2000):
 			length = len(self.y_axio)
 			fp = length - 2000
@@ -325,7 +321,6 @@ class CommonWindow(QtWidgets.QWidget):
 
 	def on_data_received(self,data):
 		self.graph.clear()
-		
 		self.y_axio.append(data)
 		if(len(self.y_axio)>200):
 			length = len(self.y_axio)
@@ -372,7 +367,7 @@ class CommonWindow(QtWidgets.QWidget):
 		except:
 			#print("serial port close exception, on_disconnect --traceback")
 			self.log_widget.appendPlainText("[{}] error, device session lost".format(strftime("%H:%M:%S")))
-		#print("Disconnected")
+		print("Disconnected")
 			
 	def on_activated_com_list(self, str):
 		if self.comport_combo.currentText() == "" or self.serialDeviceConnected == True:
@@ -394,18 +389,14 @@ class CommonWindow(QtWidgets.QWidget):
 			self.log_widget.appendPlainText("[{}] fetch stop".format(strftime("%H:%M:%S")))
 			self.graph_pressure.clear()
 			x_axio = np.linspace(0,len(self.data_to_storage)-1, len(self.data_to_storage))
-			self.curve1 = self.graph_pressure.plot(x_axio,self.data_to_storage, pen = pg.mkPen('g', width = 3), symbol = 'o', symbolSize = 6)
-
+			self.curve1 = self.graph_pressure.plot(x_axio,self.data_to_storage, pen = pg.mkPen('w', width = 3), symbol = 'o', symbolSize = 6)
 		else:
 			self.fetch_enable = True
 			self.meas_thread.running = True
 			self.meas_thread.start()
 			self.log_widget.appendPlainText("[{}] fetch start".format(strftime("%H:%M:%S")))
-			
 
 	def on_send_to_timer(self):
-		#self.slave_speed_lo = 0x00
-		#self.slave_speed_hi = 0x00
 		t_data_array = [0]*9
 		t_data_array[0] = self.slave_address
 		t_data_array[1] = self.slave_register
@@ -416,8 +407,6 @@ class CommonWindow(QtWidgets.QWidget):
 		t_data_array[6] = 0x02
 		t_data_array[7] = 0x00
 		t_data_array[8] = 0x0a
-		#t_data_array[9] = self.slave_dir_hi
-		#t_data_array[10] = self.slave_dir_lo
 
 		t_bytearray = array.array('B', t_data_array).tobytes()
 		print(t_bytearray)
@@ -439,8 +428,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.data_array[6] = t_data_array[6]
 		self.data_array[7] = t_data_array[7]
 		self.data_array[8] = t_data_array[8]
-		#self.data_array[9] = self.slave_dir_hi
-		#self.data_array[10] = self.slave_dir_lo
 		self.data_array[9] = self.slave_crc16_lo
 		self.data_array[10] = self.slave_crc16_hi
 		self.data_bytearray = bytearray(self.data_array)
@@ -471,8 +458,6 @@ class CommonWindow(QtWidgets.QWidget):
 		self.file_data_ch1 = self.data_to_storage		
 		dict_to_save = {'description':self.file_description, 'DATA':self.file_data_ch1}
 		dict_filename = "{}\\milk_microphone_{}.npy".format(os.path.dirname(os.path.abspath(__file__)),name)
-		#filename = "{}\\milk_{}.dat".format(os.path.dirname(os.path.abspath(__file__)),name)
-		
 		try:
 			np.save(dict_filename, dict_to_save)
 			self.log_widget.appendPlainText("[{}] file succesful save".format(strftime("%H:%M:%S")))
@@ -521,7 +506,7 @@ class CommonWindow(QtWidgets.QWidget):
 						self.file_description = data_items['description']
 						x_axio = np.linspace(0,len(self.file_data_microphone)-1, len(self.file_data_microphone))
 						self.curve = self.graph_pressure.plot(x_axio,self.file_data_microphone, pen = pg.mkPen('w', width = 3), symbol = 'o', symbolSize = 4)
-
+						self.log_widget.appendPlainText("[{}] file succesful load[microphone]".format(strftime("%H:%M:%S")))
 					else:
 						self.graph.clear()
 						self.graph_pressure.clear()
@@ -546,11 +531,10 @@ class CommonWindow(QtWidgets.QWidget):
 						self.curve3 = self.graph_pressure.plot(self.x_ax,self.trace3, pen = pg.mkPen('r', width = 3), symbol = 'o', symbolSize = 4)
 
 						self.btn_save.setDisabled(False)
-						self.log_widget.appendPlainText("[{}] file succesful load".format(strftime("%H:%M:%S")))
+						self.log_widget.appendPlainText("[{}] file succesful load[photodiodes]".format(strftime("%H:%M:%S")))
 			except:
 				self.log_widget.appendPlainText("[{}] file load failed".format(strftime("%H:%M:%S")))	
 				self.log_widget.appendPlainText("[{}] {}".format(strftime("%H:%M:%S"), traceback.format_exc()))						
-
 	def on_interrupted(self):
 		self.meas_thread.running = False
 		
@@ -578,7 +562,6 @@ class CommonWindow(QtWidgets.QWidget):
 	def closeEvent(self, event):#перехватываем событие закрытия приложения
 		result = QtWidgets.QMessageBox.question(self, "Подтверждение закрытия окна", "Вы действительно хотите закрыть окно?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No )
 		if result == QtWidgets.QMessageBox.Yes:
-		
 			self.hide()
 			#self.pwindow.close()
 			self.meas_thread.running = False
@@ -669,14 +652,8 @@ class evThread(QtCore.QThread):
 				for i in range(1000):
 					self.data = int.from_bytes((self.ser.read(1)), byteorder='big', signed=False)#100*np.random.random(1)#
 					self.data_array.append(self.data)
-					#time.sleep(0.0001)
-				#print(int.from_bytes((self.ser.read(1)), byteorder='big', signed=False))
-				#print(self.data_array)
 				self.dataplot_array.emit(self.data_array)
-
 				self.status_signal.emit("in progress")
-				#self.dataplot.emit(self.data)
-			#time.sleep(0.01)
 			if self.running == False:
 				self.status_signal.emit("Interrupted")
 
@@ -686,30 +663,17 @@ class evThread(QtCore.QThread):
 			self.ser = serial.Serial(self.ComPort, baudrate=921600, bytesize=serial.EIGHTBITS,
 									 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 0.01)
 			self.ser.isOpen()  # try to open port
-			#self.btn_visa_connect.setDisabled(True)
-			#self.btn_visa_disconnect.setDisabled(False)
-			#self.btn_fetch.setDisabled(False)
-			#self.btn_save.setDisabled(False)
 			self.serialDeviceConnected = True
-			#self.comport_combo.setEnabled(False)
-			#self.log_widget.appendPlainText("[{}] Connected to {}".format(strftime("%H:%M:%S"), self.ComPort))
 		except IOError:
 			print("Port already open another programm")
-			#self.log_widget.appendPlainText("[{}] Port {} already open another programm".format(strftime("%H:%M:%S"), self.ComPort))
 		except serial.SerialException:
 			print("SerialException")
-
 			#self.log_widget.appendPlainText("[{}] SerialException".format(strftime("%H:%M:%S")))
 		#except Exception:
 			#print("Unexpected error, Null ComName")
 			#self.log_widget.appendPlainText("[{}] unexpected error".format(strftime("%H:%M:%S")))
 	def on_disconnected(self):
-		#self.btn_visa_connect.setDisabled(False)
-		#self.btn_visa_disconnect.setDisabled(True)	
-		#self.btn_fetch.setDisabled(True)
-		#self.btn_save.setDisabled(True)
 		self.serialDeviceConnected = False
-		#self.comport_combo.setEnabled(True)
 		#self.log_widget.appendPlainText("[{}] Disconnected".format(strftime("%H:%M:%S")))
 		try:	
 			self.ser.close()
