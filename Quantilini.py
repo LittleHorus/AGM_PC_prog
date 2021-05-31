@@ -140,7 +140,6 @@ class CommonWindow(QtWidgets.QWidget):
 		ptsX = np.array([(-1,0,0), x_axes])
 		ptsY = np.array([(0,-1,0), y_axes])
 		ptsZ = np.array([(0,0,-1), z_axes])
-
 		#sh1 = gl.GLLinePlotItem(pos=pts, width = 2, antialias = False, mode = 'lines', color = (0.3, 0.8, 0.2, 1.0))#line_strip
 		gaxis = gl.GLAxisItem(size = QtGui.QVector3D(1.1,1.1,1.1), antialias = False, glOptions = 'translucent')
 
@@ -276,10 +275,12 @@ class CommonWindow(QtWidgets.QWidget):
 		self.vbox.insertLayout(1,self.hbox_2)
 		self.setLayout(self.vbox)
 
-		self.btn_fetch.setDisabled(True)
+		self.btn_fetch.setDisabled(False)
 		self.btn_save.setDisabled(True)
 
 		self.meas_thread = evThread()
+
+		self.qubit = Transmon_Functions()
 
 		self.btn_save.clicked.connect(self.on_save_to_file)
 		self.btn_load_file.clicked.connect(self.on_load_from_file) 
@@ -289,10 +290,14 @@ class CommonWindow(QtWidgets.QWidget):
 		#self.setCentralWidget(self.table_widget)
 
 	def on_fetch_data(self):
-		if self.fetch_enable == True:
-			self.fetch_enable = False
-		else:
-			self.fetch_enable = True
+		dict_result = self.qubit.Qubit_dynamics(self.qubit.System, 0,0,0)
+		#dict_result['Data']
+		self.log_widget.appendPlainText("[{}]".format(dict_result['Data']))
+		#System['Collapse operators']
+		#self.log_widget.appendPlainText("[{}] ".format(self.qubit.System['Collapse operators']))		
+
+		self.log_widget.appendPlainText("[{}]".format(dict_result['<$p_{ee}$>']))#
+
 
 	def on_get_current_path(self):
 		print(os.path.dirname(os.path.abspath(__file__)))	
@@ -434,48 +439,53 @@ class Transmon_Functions():
 		self.tlist = np.linspace(0,300,6000)
 		self.dd = 0.15# assymetry of JJs
 		self.ng = 0.5# charge displacement
-		self.dt = tlist[1] - tlist[0]
+		self.dt = self.tlist[1] - self.tlist[0]
 		self.SIZE_CHARGE = 95# size of charge basis
-		self.SIZE_Ph_Res = 1# size of Fock+state basis for the resonator
+		self.SIZE_Ph_Res = 2# size of Fock+state basis for the resonator
 		self.N_qb_max = 4#maximum of qubit's states taken into account, truncation operation
 		self.betta_res = 0.5# relation of capacitances Cgate/Csum
 
+		self.h = 6.64*10**(-34)
+		self.kb = 1.38*10**(-23)
 		self.EC= 0.38
 		self.EJEC = 38
 		self.flux = 1
 		self.wr = 7.757
 		self.VRES = 0.08
-		self.Id_a = qeye(self.SIZE_Ph_Res)
+		self.Id_a = qutip.qeye(self.SIZE_Ph_Res)
 		self.kappa = 1e-2 
 		self.coupling = 1e-4
 		self.dephas = 1e-4
 		self.Temperature = 60e-3
-		self.System= Qubit_Cavity_define(EC,EJEC,flux,wr,VRES,Temperature)
-		self.System_ref=Qubit_Cavity_define_without_Temp(EC,EJEC,flux,wr,VRES,Temperature)
-		self.H0=System['Hamiltonian']
-		self.Energies=System['Energies and states'][0]
-		self.States=System['Energies and states'][1]
-		self.Transmon_states=System['Transmon states']
-		self.operator_bos=System['Operators photon']
-		self.qubit_oper=System['Operator charge number']
-		self.Energia_transmo=System['Transmon energies']
-		self.gres=System['Couplings g01,g12']
+		self.System = self.Qubit_Cavity_define(self.EC,self.EJEC,self.flux,self.wr,self.VRES,self.Temperature)
 
+		self.Qubit_Cavity_define_dict = {}
+
+		#self.System_ref=self.Qubit_Cavity_define_without_Temp(self.EC,self.EJEC,self.flux,self.wr,self.VRES,self.Temperature)#----
+		self.H0=self.System['Hamiltonian']
+		self.Energies=self.System['Energies and states'][0]
+		self.States=self.System['Energies and states'][1]
+		self.Transmon_states=self.System['Transmon states']
+		self.operator_bos=self.System['Operators photon']
+		self.qubit_oper=self.System['Operator charge number']
+		self.Energia_transmo=self.System['Transmon energies']
+		self.gres=self.System['Couplings g01,g12']
+		#----------------------------------------------
 
 	def Nstate(self, Nbas, Npho):
 		#creates FOCK state-vector
 		#parameter Nbas: defines the maximum number of photons in the basis
 		#parameter Npho: defines the number pf photons in the state
-		return (fock(Nbas, Npho))
+		return (qutip.fock(Nbas, Npho))
 	def Coherent(self, Nbas, Npho):
 		#create coherent state-vector with Npho photons in the basis of size Nbas
 		#parameter Nbas: defines the maximum number of photons in the basis
 		#parameter Npho: defines the number of photons in state
-		return (coherent(Nbas, Npho))
+		return (qutip.coherent(Nbas, Npho))
 	def CoSThe(self, Number):
 		#cos(phi) operator in charge basis
 		#parameter Number: defines the size of charge basis
-		cos - qutip.Qobj(np.diag(0.5*np.ones(2*Number), k=1)+
+		cos = qutip.Qobj(np.diag(0.5*np.ones(2*Number), k=1)+
 						np.diag(0.5*np.ones(2*Number), k = -1))
 		return cos
 	def SiNThe(self, Number):
@@ -495,9 +505,9 @@ class Transmon_Functions():
 		#parameter Ec: defines the Coulomb energy of the transmon
 		#parameter EjEc: defines the relation btw Josephson and Coulomb energies Ej/Ec
 		#parameter Size: defies the size of the charge basis
-		Nchar = Charge(size)
+		Nchar = self.Charge(Size)
 		Ej = EjEc*Ec
-		Htrans = 4*Ec*(Nchar-ng)*(Nchar-ng)-Ej*CoSThe(Size)
+		Htrans = 4*Ec*(Nchar-ng)*(Nchar-ng)-Ej*self.CoSThe(Size)
 		return Htrans
 	def logical_basis(self, H):
 		#return firsts 5 eigenstates of Hamiltonian H and coresonding eigeneregies
@@ -575,7 +585,7 @@ class Transmon_Functions():
 		# wr-linear frequency of resonator, 
 		# Vres - RMS voltage at the resonator at resonance frequency, defined as sqrt(hf_r/2C_r) in units of eV
 		# (i.e. we set V_rms*e)
-		EJ = np.sqrt(np.cos(np.pi*flux)*np.cos(np.pi*flux)+(dd**2)*(np.sin(np.pi*flux))*(np.sin(np.pi*flux)))# Josephson energy of qubit
+		EJ = np.sqrt(np.cos(np.pi*flux)*np.cos(np.pi*flux)+(self.dd**2)*(np.sin(np.pi*flux))*(np.sin(np.pi*flux)))# Josephson energy of qubit
 		H_bare = Htrans(ng, EC, EJEC*EJ, self.SIZE_CHARGE)#bare transmon
 		Eig_ener, Eig_states = H_bare.eigenstates()#fine the eigenbasis for transmon
 		#first four states of transmon in charge basis
@@ -681,37 +691,38 @@ class Transmon_Functions():
 		return (Output)
 
 	def Qubit_Cavity_define(self, EC, EJEC, flux, wr, Vres, Temperature):
+		# object dict +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 		#EC - Coulomb energy
 		#EJEC = EJ/EC where EC Josephson energy
 		#wr - linear frequency of resonator
 		#Vres - RMS voltage at the resonator at resonance frequency, define as sqrt(hf_r2C_r) in units of eV
 		#(i.e. we set V_rms*e)
-		EJ = np.sqrt(np.cos(np.pi*flux)*np.cos(np.pi*flux) + (dd**2)*(np.sin(np.pi*flux))*(np.sin(np.pi*flux))) #Josephson energy of qubit
-		H_bare = Htrans(ng, EC, EJEC*EJ, self.SIZE_CHARGE) #bare transmon
+		EJ = np.sqrt(np.cos(np.pi*flux)*np.cos(np.pi*flux) + (self.dd**2)*(np.sin(np.pi*flux))*(np.sin(np.pi*flux))) #Josephson energy of qubit
+		H_bare = self.Htrans(self.ng, EC, EJEC*EJ, self.SIZE_CHARGE) #bare transmon
 		Eig_ener, Eig_states = H_bare.eigenstates()#find the eigenbasis for transmon
 		#first four states of transmob in charge basis
-		if N_qb_max <= 2:
+		if self.N_qb_max <= 2:
 			gnd = Eig_states[0]
 			exc = Eig_states[1]
 		else:
 			gnd = Eig_states[0]
 			exc = Eig_states[1]
 			fer = Eig_states[2]
-		N = Charge(self,SIZE_CHARGE)
-		cos_phi = CoSThe(self.SIZE_CHARGE)
-		sin_phi = SiNThe(self.SIZE_CHARGE)
-		change_basis_matrix = qutip.Qobj(bp.column_stack(x.full() for x in Eig_states))#create transformation matrix
+		N = self.Charge(self.SIZE_CHARGE)
+		cos_phi = self.CoSThe(self.SIZE_CHARGE)
+		sin_phi = self.SiNThe(self.SIZE_CHARGE)
+		change_basis_matrix = qutip.Qobj(np.column_stack(x.full() for x in Eig_states))#create transformation matrix
 
-		N_eig = change_basis(N, change_basis_matrix) # Coopper pair number operator in the eigenbasis 
-		cos_phi_eig = change_basis(cos_phi, change_basis_matrix)# cos phase operator in the eigenbasis
-		sin_phi_eig = change_basis(sin_phi, change_basis_matrix)# sin phase operator in the eigenbasis
-		N_ch_eigv_basis = qutip.Qobj(N_eig[:N_qb_max, :N_qb_max])
-		cos_phi_eig = qutip.Qobj(cos_phi_eig[:N_qb_max, :N_qb_max])
-		sin_phi_eig = qutip.Qobj(sin_phi_eig[:N_qb_max, :N_qb_max])
-		Id_trans = qutip.qeye(N_qb_max)
-		Hqub_trunc=4*EC*(N_ch_eigv_basis-ng)**2-EC*EJEC*EJ*cos_phi_eig
+		N_eig = self.change_basis(N, change_basis_matrix) # Coopper pair number operator in the eigenbasis 
+		cos_phi_eig = self.change_basis(cos_phi, change_basis_matrix)# cos phase operator in the eigenbasis
+		sin_phi_eig = self.change_basis(sin_phi, change_basis_matrix)# sin phase operator in the eigenbasis
+		N_ch_eigv_basis = qutip.Qobj(N_eig[:self.N_qb_max, :self.N_qb_max])
+		cos_phi_eig = qutip.Qobj(cos_phi_eig[:self.N_qb_max, :self.N_qb_max])
+		sin_phi_eig = qutip.Qobj(sin_phi_eig[:self.N_qb_max, :self.N_qb_max])
+		Id_trans = qutip.qeye(self.N_qb_max)
+		Hqub_trunc=4*EC*(N_ch_eigv_basis-self.ng)**2-EC*EJEC*EJ*cos_phi_eig
 		New_ener,New_states=Hqub_trunc.eigenstates()
-		if N_qb_max<=2:
+		if self.N_qb_max<=2:
 			ff01=New_ener[1]-New_ener[0]
 			ff02=0
 			ff12=0
@@ -719,8 +730,8 @@ class Transmon_Functions():
 			GND=New_states[0]
 			EXC=New_states[1]
 
-			gnd_1=tensor(GND,Nstate(self.SIZE_Ph_Res,1))
-			exc_1=tensor(EXC,Nstate(self.SIZE_Ph_Res,1))
+			gnd_1=qutip.tensor(GND,self.Nstate(self.SIZE_Ph_Res,1))
+			exc_1=qutip.tensor(EXC,self.Nstate(self.SIZE_Ph_Res,1))
 		else:
 			ff01=New_ener[1]-New_ener[0]
 			ff02=New_ener[2]-New_ener[0]
@@ -730,57 +741,57 @@ class Transmon_Functions():
 			EXC=New_states[1]
 			FER=New_states[2]
 
-			gnd_1=tensor(GND,Nstate(self.SIZE_Ph_Res,1))
-			exc_1=tensor(EXC,Nstate(self.SIZE_Ph_Res,1))
-			fer_1=tensor(FER,Nstate(self.SIZE_Ph_Res,1))
+			gnd_1=qutip.tensor(GND,self.Nstate(self.SIZE_Ph_Res,1))
+			exc_1=qutip.tensor(EXC,self.Nstate(self.SIZE_Ph_Res,1))
+			fer_1=qutip.tensor(FER,self.Nstate(self.SIZE_Ph_Res,1))
 		Eigenstates_transmon=[GND,EXC,FER]
 		Eigenenergies_transmon=[New_ener[0],New_ener[1],New_ener[2]]
 		#resonator operators
-		a=destroy(self.SIZE_Ph_Res)
+		a=qutip.destroy(self.SIZE_Ph_Res)
 		ad=a.dag()
 		N_a=ad*a
-		Id_a=qeye(self.SIZE_Ph_Res)
+		Id_a=qutip.qeye(self.SIZE_Ph_Res)
 		X_a=(a + a.dag()) / np.sqrt(2)
 		P_a=(a - a.dag()) / np.sqrt(2)/1j
 		#Time independent part of system, collect the operator in an united basis
-		N_trans=tensor(N_ch_eigv_basis,Id_a)
-		cosphi=tensor(cos_phi_eig,Id_a)
-		sinphi=tensor(sin_phi_eig,Id_a)
-		A=tensor(Id_trans,a)
+		N_trans=qutip.tensor(N_ch_eigv_basis,Id_a)
+		cosphi=qutip.tensor(cos_phi_eig,Id_a)
+		sinphi=qutip.tensor(sin_phi_eig,Id_a)
+		A=qutip.tensor(Id_trans,a)
 		Ad=A.dag()
-		N_A=tensor(Id_trans,N_a)
+		N_A=qutip.tensor(Id_trans,N_a)
 		#estimate of coupling between first/second excited state and resonator
-		if N_qb_max<=2:
-			g01_res=2*betta_res*Vres*exc.dag()*N*gnd
+		if self.N_qb_max<=2:
+			g01_res=2*self.betta_res*Vres*exc.dag()*N*gnd
 			g12_res=0
 		else:
-			g01_res=2*betta_res*Vres*exc.dag()*N*gnd
-			g12_res=2*betta_res*Vres*fer.dag()*N*exc
+			g01_res=2*self.betta_res*Vres*exc.dag()*N*gnd
+			g12_res=2*self.betta_res*Vres*fer.dag()*N*exc
 		#write the whole system hamiltonian in united basis
-		Hqub=4*EC*(N_trans-ng)**2-EC*EJEC*EJ*cosphi
+		Hqub=4*EC*(N_trans-self.ng)**2-EC*EJEC*EJ*cosphi
 		H_res=wr*N_A
-		Hint1=2*betta_res*Vres*N_trans*(A+Ad)
+		Hint1=2*self.betta_res*Vres*N_trans*(A+Ad)
 		H0=Hqub+H_res+Hint1
 		System_ener,System_states=H0.eigenstates()
 		#compose the collapse operators list
 		cops_list=[]
 		T=Temperature
 
-		nth10=(np.exp(-h*ff01*1e9/kb/T))/(1-np.exp(-h*ff01*1e9/kb/T))
-		nth20=(1-np.exp(-h*ff02*1e9/kb/T))**(-1)*(np.exp(-h*ff02*1e9/kb/T))
-		nth12=(1-np.exp(-h*ff12*1e9/kb/T))**(-1)*(np.exp(-h*ff12*1e9/kb/T))
-		nres=(np.exp(-h*wr*1e9/kb/T))/(1-np.exp(-h*wr*1e9/kb/T))
-		s_10=tensor(GND*EXC.dag(),Id_a)
-		s_12=tensor(EXC*FER.dag(),Id_a)
+		nth10=(np.exp(-self.h*ff01*1e9/self.kb/T))/(1-np.exp(-self.h*ff01*1e9/self.kb/T))
+		nth20=(1-np.exp(-self.h*ff02*1e9/self.kb/T))**(-1)*(np.exp(-self.h*ff02*1e9/self.kb/T))
+		nth12=(1-np.exp(-self.h*ff12*1e9/self.kb/T))**(-1)*(np.exp(-self.h*ff12*1e9/self.kb/T))
+		nres=(np.exp(-self.h*wr*1e9/self.kb/T))/(1-np.exp(-self.h*wr*1e9/self.kb/T))
+		s_10=qutip.tensor(GND*EXC.dag(),Id_a)
+		s_12=qutip.tensor(EXC*FER.dag(),Id_a)
 
-		s_11=tensor(EXC*EXC.dag()-GND*GND.dag(),Id_a)
-		s_22=tensor(FER*FER.dag()-EXC*EXC.dag(),Id_a)
+		s_11=qutip.tensor(EXC*EXC.dag()-GND*GND.dag(),Id_a)
+		s_22=qutip.tensor(FER*FER.dag()-EXC*EXC.dag(),Id_a)
 
-		gam_10=coupling
-		gam_12=2*coupling
+		gam_10=self.coupling
+		gam_12=2*self.coupling
 
-		gam_11=dephas
-		gam_22=dephas
+		gam_11=self.dephas
+		gam_22=self.dephas
 
 		rate01_0=np.sqrt(gam_10*(nth10+1))*s_10
 		rate01_1=np.sqrt(gam_10*(nth10))*s_10.dag()
@@ -797,8 +808,8 @@ class Transmon_Functions():
 
 		cops_list.append(rate11)
 		cops_list.append(rate22)
-		rate_res=np.sqrt(kappa*(nres+1))*A
-		rate_res2=np.sqrt(kappa*nres)*A.dag()
+		rate_res=np.sqrt(self.kappa*(nres+1))*A
+		rate_res2=np.sqrt(self.kappa*nres)*A.dag()
 
 		cops_list.append(rate_res) 
 		cops_list.append(rate_res2)
@@ -822,6 +833,7 @@ class Transmon_Functions():
 		Output['Operator charge number']=N_trans
 		Output['Collapse operators']=cops_list
 		Output['Transmon energies']=Eigenenergies_transmon
+		Output['Id_a'] = Id_a
 
 		return (Output)
 	def Collapse(self, System, Temperature, coupling, dephas):
@@ -891,8 +903,11 @@ class Transmon_Functions():
 
 		return cops_list
 
-	def Qubit_dynamics(self, System,Initial_state,probe,excite,DM_flag):
+	def Qubit_dynamics(self, System,probe,excite,DM_flag):
+	#def Qubit_dynamics(self, System,Initial_state,probe,excite,DM_flag):	
+		# DM flag store full matrix
 		H0=System['Hamiltonian']
+		print("H0: {}".format(H0))
 		operator_boson=System['Operators photon']
 		operator_qubit=System['Operator charge number']
 		collapse=System['Collapse operators']
@@ -902,27 +917,33 @@ class Transmon_Functions():
 		Hprobe1=A
 		Hprobe2=Ad
 
-		Hpr1=[Hprobe1,probe[0]]
-		Hpr2=[Hprobe2,probe[1]]
+		#Hpr1=[Hprobe1,probe[0]]
+		#Hpr2=[Hprobe2,probe[1]]
 
-		Hgt1=[operator_qubit,excite[0]]
-		Hgt2=[operator_qubit,excite[1]]
+		#Hgt1=[operator_qubit,excite[0]]
+		#Hgt2=[operator_qubit,excite[1]]
 
 		# collapse operator
 		c_ops=collapse
-		H=[H0,Hpr1,Hpr2,Hgt1,Hgt2] #full Hamiltonian
-		psi0=Initial_state
-		opts = Options()
+		Id_a = System['Id_a']
+		Transmon_states = System['Transmon states']
+		print("TransmonStates: {}".format(Transmon_states[0]))
+		print("Id_a: {}".format(Id_a))
+
+		H=[H0]#,Hpr1,Hpr2,Hgt1,Hgt2] #full Hamiltonian
+		psi0=qutip.tensor(Transmon_states[1], qutip.fock(self.SIZE_Ph_Res, 0))#Initial_state
+		opts = qutip.Options()
 
 		opts.store_states=DM_flag
 		opts.store_final_state=DM_flag
-		GND_p=tensor(Transmon_states[0]*Transmon_states[0].dag(),Id_a)
-		EXC_p=tensor(Transmon_states[1]*Transmon_states[1].dag(),Id_a)
-		FER_p=tensor(Transmon_states[2]*Transmon_states[2].dag(),Id_a)
+		GND_p=qutip.tensor(Transmon_states[0]*Transmon_states[0].dag(),Id_a)
+		EXC_p=qutip.tensor(Transmon_states[1]*Transmon_states[1].dag(),Id_a)
+		FER_p=qutip.tensor(Transmon_states[2]*Transmon_states[2].dag(),Id_a)
 
 		N_A=Ad*A
 		exp_ops=[N_A,GND_p,EXC_p,FER_p,A+A.dag(),A.dag()-A]
-		result0=mesolve(H,psi0,tlist,c_ops,exp_ops,options=opts)
+		print("psi0: {}".format(psi0))
+		result0=qutip.mesolve(H,psi0,self.tlist,c_ops,exp_ops,options=opts)
 
 		Dynamika={}
 		Dynamika['<$N_a$>']=result0.expect[0]
